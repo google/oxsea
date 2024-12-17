@@ -117,7 +117,7 @@ impl<'i, 'o> IntoAST<'i, 'o> {
                 )))
             }
             IRInstruction::BindExport(name) => {
-                let value = node.inputs()[0];
+                let value = node.inputs()[1];
                 let value_expr: Expression<'o> = self.visit_expression(value)?;
                 if name == "default" {
                     return Ok(Some(Statement::ExportDefaultDeclaration(
@@ -181,10 +181,7 @@ impl<'i, 'o> IntoAST<'i, 'o> {
             }
             IRInstruction::Block => {
                 let mut body = self.ast.vec();
-                for (index, output) in node.outputs().iter().enumerate() {
-                    if index == 0 {
-                        continue;
-                    }
+                for (_, output) in node.outputs().iter().enumerate() {
                     let output_node = self.graph.get_node(*output);
                     if let IRInstruction::Phi = output_node.instruction() {
                         let phi_input_index = output_node
@@ -192,7 +189,6 @@ impl<'i, 'o> IntoAST<'i, 'o> {
                             .iter()
                             .position(|x| *x == node_id)
                             .unwrap();
-                        println!("Set phi Φ{} @ {}", output, phi_input_index);
                         let value = self.visit_expression(output_node.inputs()[phi_input_index + 1])?;
                         body.push(Statement::ExpressionStatement(
                             self.ast.alloc_expression_statement(

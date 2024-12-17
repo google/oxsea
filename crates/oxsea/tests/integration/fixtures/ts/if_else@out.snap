@@ -5,8 +5,8 @@ input_file: crates/oxsea/tests/integration/fixtures/ts/if_else.ts
 snapshot_kind: text
 ---
 if (cond) {
-	Φ10 = 23;
+	Φ8 = 23;
 } else {
-	Φ10 = 37;
+	Φ8 = 37;
 }
-export default Φ10;
+export default Φ8;

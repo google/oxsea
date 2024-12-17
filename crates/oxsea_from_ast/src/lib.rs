@@ -173,10 +173,12 @@ impl<'a> Visit<'a> for FromAST<'a> {
     }
 
     fn visit_if_statement(&mut self, it: &oxc_ast::ast::IfStatement<'a>) {
+        let control_input = self.control_tail;
         // First, collect the node for our test expression.
         self.visit_expression(&it.test);
         let condition = self.value_stack.pop().unwrap();
-        let (branch_id, consequent_id, alternate_id) = self.ir.add_if_else(self.control_tail, condition);
+        let consequent_id = self.ir.add_block();
+        let alternate_id = self.ir.add_block();
 
         let original_symbol_table = self.symbol_table.clone();
 
@@ -193,17 +195,26 @@ impl<'a> Visit<'a> for FromAST<'a> {
             alternate_tail = self.control_tail;
         }
 
-        let merge = self.ir.add_merge(&[branch_id, consequent_tail, alternate_tail]);
-        self.control_tail = merge;
-
         for (symbol, value) in self.symbol_table.iter_mut_enumerated() {
             let consequent_value = consequent_symbol_table[symbol];
             if consequent_value != *value {
                 // If the symbol has diverged, create a phi node for it.
-                let phi = self.ir.add_phi(&[consequent_tail, consequent_value, alternate_tail, *value]);
+                let phi = self
+                    .ir
+                    .add_phi(&[consequent_id, consequent_value, alternate_id, *value]);
                 *value = phi;
             }
         }
+
+        let merge_id = self.ir.add_if_else(
+            control_input,
+            condition,
+            consequent_id,
+            alternate_id,
+            consequent_tail,
+            alternate_tail,
+        );
+        self.control_tail = merge_id;
     }
 }
 

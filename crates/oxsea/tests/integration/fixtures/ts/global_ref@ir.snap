@@ -21,6 +21,7 @@ digraph {
   n6 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
   n4 -> n6:i0;
   n5 -> n6:i1;
-  n7 [shape=record, label="{{<i0> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
-  n6 -> n7:i0;
+  n7 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n1 -> n7:i0;
+  n6 -> n7:i1;
 }

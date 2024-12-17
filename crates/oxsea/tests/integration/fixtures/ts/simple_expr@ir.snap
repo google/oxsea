@@ -15,6 +15,7 @@ digraph {
   n2 [shape=box, label="= 11.0"] [style="rounded, dashed"];
   n3 [shape=box, label="= 7.0"] [style="rounded, dashed"];
   n4 [shape=box, label="= 18.0"] [style=rounded];
-  n5 [shape=record, label="{{<i0> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
-  n4 -> n5:i0;
+  n5 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n1 -> n5:i0;
+  n4 -> n5:i1;
 }
