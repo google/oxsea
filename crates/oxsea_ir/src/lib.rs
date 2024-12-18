@@ -53,6 +53,7 @@ impl IRInstruction {
             | IRInstruction::Start
             | IRInstruction::Unreachable
             | IRInstruction::Return
+            | IRInstruction::Phi
             | IRInstruction::BindExport(_)
             | IRInstruction::IfElse
             | IRInstruction::Block
@@ -335,6 +336,10 @@ impl IRGraph {
                 },
             ],
         }
+    }
+
+    pub fn len(&self) -> usize {
+        return self.nodes.len();
     }
 
     pub fn add_edge(&mut self, from: IRNodeId, to: IRNodeId) {
