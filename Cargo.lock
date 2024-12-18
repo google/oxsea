@@ -558,6 +558,7 @@ dependencies = [
  "oxc_ast",
  "oxc_codegen",
  "oxsea_ir",
+ "oxsea_traverse",
 ]
 
 [[package]]
@@ -565,6 +566,14 @@ name = "oxsea_ir"
 version = "0.1.0"
 dependencies = [
  "oxc_ast",
+]
+
+[[package]]
+name = "oxsea_traverse"
+version = "0.1.0"
+dependencies = [
+ "oxc_ast",
+ "oxsea_ir",
 ]
 
 [[package]]

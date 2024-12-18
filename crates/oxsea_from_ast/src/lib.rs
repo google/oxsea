@@ -286,7 +286,9 @@ mod tests {
     fn ir_from_source(source: &str) -> oxsea_ir::IRGraph {
         let allocator = Allocator::default();
         let ret = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        super::ir_from_ast(&ret.program).unwrap()
+        let ir = super::ir_from_ast(&ret.program).unwrap();
+        check_graph(&ir);
+        ir
     }
 
     #[test]
@@ -304,10 +306,42 @@ mod tests {
             actual.get_node(3),
             &IRNode::new(
                 oxsea_ir::IRInstruction::BindExport("default".to_string()),
-                vec![2],
+                vec![1, 2],
                 vec![IR_END_ID],
             )
         );
+    }
+
+    fn check_graph(ir: &oxsea_ir::IRGraph) {
+        // Check that all inputs and outputs are linked properly.
+        for node_id in 0..ir.len() {
+            let node = ir.get_node(node_id);
+            for &input in node.inputs() {
+                assert!(
+                    ir.get_node(input).outputs().contains(&node_id),
+                    "Node: #{} {:#?}\nIs missing from outputs of #{} {:#?}\n",
+                    node_id,
+                    node,
+                    input,
+                    ir.get_node(input)
+                );
+            }
+            for &output in node.outputs() {
+                assert!(
+                    ir.get_node(output).inputs().contains(&node_id),
+                    "Node: #{} {:#?}\nIs missing from inputs of #{} {:#?}\n",
+                    node_id,
+                    node,
+                    output,
+                    ir.get_node(output)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pruned_branch() {
+        ir_from_source("let x = 1; if (true) { x = 2; } export default x;");
     }
 
     #[test]

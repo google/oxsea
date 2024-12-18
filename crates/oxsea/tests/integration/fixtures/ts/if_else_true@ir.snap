@@ -18,7 +18,7 @@ digraph {
   n5 [shape=box, label="block"] [style="filled, dashed", fillcolor="#ffffaa"];
   n6 [shape=box, label="= 2.0"] [style="rounded, dashed"];
   n7 [shape=box, label="= 3.0"] [style=rounded];
-  n8 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=rounded];
+  n8 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=filled, fillcolor="#ffffaa"];
   n1 -> n8:i0;
   n7 -> n8:i1;
   n9 -> n8:i2;
@@ -35,7 +35,7 @@ digraph {
   n16 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
   n8 -> n16:i0;
   n15 -> n16:i1;
-  n17 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=rounded];
+  n17 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=filled, fillcolor="#ffffaa"];
   n1 -> n17:i0;
   n14 -> n17:i1;
   n18 -> n17:i2;

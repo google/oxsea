@@ -355,21 +355,38 @@ impl IRGraph {
         let outputs = node.outputs.clone();
         self.nodes[node_id].inputs.clear();
         self.nodes[node_id].outputs.clear();
-        for output in outputs {
-            let target = &mut self.nodes[output];
+        for output in &outputs {
+            let target = &mut self.nodes[*output];
+            let mut found = false;
             for input in target.inputs.iter_mut() {
                 if *input == node_id {
                     *input = replacement_id;
+                    found = true;
                 }
             }
+            if !found {
+                target.add_input(replacement_id);
+            }
         }
-        for input in inputs {
-            let target = &mut self.nodes[input];
+        for input in &inputs {
+            let target = &mut self.nodes[*input];
+            let mut found = false;
             for output in target.outputs.iter_mut() {
                 if *output == node_id {
                     *output = replacement_id;
+                    found = true;
                 }
             }
+            if !found {
+                target.add_output(replacement_id);
+            }
+        }
+
+        for output in outputs {
+            self.nodes[replacement_id].add_output(output);
+        }
+        for input in inputs {
+            self.nodes[replacement_id].add_input(input);
         }
     }
 

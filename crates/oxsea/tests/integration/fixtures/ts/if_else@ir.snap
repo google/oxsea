@@ -22,7 +22,7 @@ digraph {
   n9 -> n5:i1;
   n6 [shape=box, label="= 23.0"] [style=rounded];
   n7 [shape=box, label="= 37.0"] [style=rounded];
-  n8 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=rounded];
+  n8 [shape=record, label="{{<i0> c0|<i1> v0|<i2> c1|<i3> v1}|Φ}"] [style=filled, fillcolor="#ffffaa"];
   n4 -> n8:i0;
   n6 -> n8:i1;
   n5 -> n8:i2;

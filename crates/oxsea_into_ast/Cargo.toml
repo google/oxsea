@@ -8,6 +8,7 @@ oxc_allocator.workspace = true
 oxc_ast.workspace = true
 
 oxsea_ir = { path = "../oxsea_ir" }
+oxsea_traverse = { path = "../oxsea_traverse" }
 
 [dev-dependencies]
 oxc_codegen.workspace = true

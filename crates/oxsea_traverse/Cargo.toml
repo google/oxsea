@@ -1,0 +1,9 @@
+[package]
+name = "oxsea_traverse"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oxc_ast.workspace = true
+
+oxsea_ir = { path = "../oxsea_ir" }
