@@ -207,25 +207,10 @@ impl IRNode {
         control_input_id: IRNodeId,
         branch_id: IRNodeId,
         branch_tail_id: IRNodeId,
-        alternate_id: IRNodeId,
     ) -> Option<PeepholeResult> {
-        let branch = graph.get_node(branch_id).clone();
+        graph.add_edge(control_input_id, branch_id);
 
-        let unreachable_id = graph.add_unreachable();
-        graph.replace_control(alternate_id, unreachable_id);
-        graph.replace_control(branch_id, control_input_id);
-
-        if branch.outputs().len() == 0 {
-            return Some(PeepholeResult::Existing(control_input_id));
-        }
-
-        // Add new block node to replace the if-else node.
-        // Return the tail of the branch.
-        if branch_id == branch_tail_id {
-            Some(PeepholeResult::Existing(control_input_id))
-        } else {
-            Some(PeepholeResult::Existing(branch_tail_id))
-        }
+        Some(PeepholeResult::Existing(branch_tail_id))
     }
 
     pub fn peephole_optimize(&self, graph: &mut IRGraph) -> Option<PeepholeResult> {
@@ -265,13 +250,11 @@ impl IRNode {
                 {
                     let branch_id = self.outputs[0];
                     let branch_tail_id = self.outputs[2];
-                    let alternate_id = self.outputs[1];
                     return self.remove_branch(
                         graph,
                         control_input_id,
                         branch_id,
                         branch_tail_id,
-                        alternate_id,
                     );
                 } else if let IRInstruction::Constant(CompileTimeValue::Boolean(false)) =
                     &condition_node.instruction
@@ -279,13 +262,11 @@ impl IRNode {
                     // Optimize to the alternate branch, if one exists.
                     let branch_id = self.outputs[1];
                     let branch_tail_id = self.outputs[3];
-                    let alternate_id = self.outputs[0];
                     return self.remove_branch(
                         graph,
                         control_input_id,
                         branch_id,
                         branch_tail_id,
-                        alternate_id,
                     );
                 }
             }
@@ -498,13 +479,8 @@ impl IRGraph {
             inputs: vec![control, condition],
             outputs: vec![consequent_id, alternate_id, consequent_tail, alternate_tail],
         };
-        let branch_id = self.add_node(node);
-        let branch_node = self.get_node(branch_id);
-        if let IRInstruction::IfElse = branch_node.instruction {
-            let merge_id = self.add_merge(&[branch_id]);
-            return merge_id;
-        }
-        return branch_id;
+        self.add_node(node);
+        self.add_merge(&[consequent_tail, alternate_tail])
     }
 
     pub fn add_merge(&mut self, controls: &[IRNodeId]) -> IRNodeId {
@@ -712,5 +688,22 @@ mod tests {
                 outputs: vec![5],
             }
         );
+    }
+
+    #[test]
+    fn removes_dead_if_branch() {
+        let mut ir = IRGraph::new();
+        let cond = ir.add_constant(Boolean(false));
+        let consequent = ir.add_block();
+        let alternate = ir.add_block();
+        let two = ir.add_constant(Number(2.0));
+        let three = ir.add_constant(Number(3.0));
+        let phi = ir.add_phi(&[consequent, two, alternate, three]);
+        let branch_merge = ir.add_if_else(IR_START_ID, cond, consequent, alternate, consequent, alternate);
+        ir.add_return(branch_merge, phi);
+
+        for i in 0..ir.len() {
+            assert!(ir.get_node(i).instruction != IRInstruction::IfElse);
+        }
     }
 }
