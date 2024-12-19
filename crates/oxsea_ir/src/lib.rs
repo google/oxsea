@@ -18,6 +18,7 @@ pub type IRNodeId = usize;
 
 pub const IR_END_ID: IRNodeId = 0;
 pub const IR_START_ID: IRNodeId = 1;
+pub const IR_INVALID_ID: IRNodeId = std::u32::MAX as usize;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CompileTimeValue {
@@ -209,7 +210,6 @@ impl IRNode {
         alternate_id: IRNodeId,
     ) -> Option<PeepholeResult> {
         let branch = graph.get_node(branch_id).clone();
-        // let branch_outputs = branch.outputs();
 
         let unreachable_id = graph.add_unreachable();
         graph.replace_control(alternate_id, unreachable_id);
@@ -221,7 +221,6 @@ impl IRNode {
 
         // Add new block node to replace the if-else node.
         // Return the tail of the branch.
-        // let new_branch_id = graph.add_linked_block(&[control_input_id], &branch_outputs);
         if branch_id == branch_tail_id {
             Some(PeepholeResult::Existing(control_input_id))
         } else {

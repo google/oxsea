@@ -1,19 +1,43 @@
 use oxc_ast::ast::BinaryOperator;
-use oxsea_ir::{CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IR_START_ID};
+use oxsea_ir::{
+    CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IR_END_ID, IR_INVALID_ID,
+    IR_START_ID,
+};
+use sort::topological_sort;
 
 #[macro_use]
 mod macros;
+
+mod sort;
+pub mod transform;
 
 pub struct Context<'i> {
     graph: &'i IRGraph,
 
     order: std::vec::Vec<IRNodeId>,
+    ids: std::vec::Vec<IRNodeId>,
 }
 
 impl Context<'_> {
     pub fn new(graph: &IRGraph) -> Context {
         let order = topological_sort(graph);
-        Context { graph, order }
+        Context {
+            graph,
+            order,
+            ids: vec![],
+        }
+    }
+
+    pub fn new_with_ids(graph: &IRGraph) -> Context {
+        let mut ids = vec![IR_INVALID_ID; graph.len()];
+        ids[IR_END_ID] = IR_END_ID;
+        ids[IR_START_ID] = IR_START_ID;
+
+        Context {
+            graph,
+            order: vec![IR_INVALID_ID; graph.len()],
+            ids,
+        }
     }
 
     fn graph(&self) -> &IRGraph {
@@ -22,6 +46,14 @@ impl Context<'_> {
 
     fn topological_order(&self) -> &std::vec::Vec<IRNodeId> {
         &self.order
+    }
+
+    fn node_id(&self, original_id: usize) -> usize {
+        if self.ids.len() > 0 {
+            self.ids[original_id]
+        } else {
+            original_id
+        }
     }
 }
 
@@ -59,9 +91,8 @@ pub struct Return<'i> {
 }
 
 impl Return<'_> {
-    pub fn value_id(&self) -> IRNodeId {
-        return self.node.inputs()[1];
-    }
+    input_id_accessor!(control_id, 0);
+    input_id_accessor!(value_id, 1);
 }
 node_kind! { Return }
 
@@ -72,13 +103,8 @@ pub struct Add<'i> {
 }
 
 impl Add<'_> {
-    pub fn left_id(&self) -> usize {
-        return self.node.inputs()[0];
-    }
-
-    pub fn right_id(&self) -> usize {
-        return self.node.inputs()[1];
-    }
+    input_id_accessor!(left_id, 0);
+    input_id_accessor!(right_id, 1);
 }
 node_kind! { Add }
 
@@ -96,13 +122,8 @@ impl Compare<'_> {
         self.operator
     }
 
-    pub fn left_id(&self) -> IRNodeId {
-        self.node.inputs()[0]
-    }
-
-    pub fn right_id(&self) -> IRNodeId {
-        self.node.inputs()[1]
-    }
+    input_id_accessor!(left_id, 0);
+    input_id_accessor!(right_id, 1);
 }
 
 pub struct Constant<'i> {
@@ -215,32 +236,6 @@ pub struct PhiValue<'i> {
 }
 node_kind! { PhiValue }
 
-fn topological_sort(graph: &IRGraph) -> std::vec::Vec<IRNodeId> {
-    let mut visited = vec![false; graph.len()];
-    let mut result = std::vec::Vec::with_capacity(graph.len());
-
-    fn dfs(
-        graph: &IRGraph,
-        node_id: IRNodeId,
-        visited: &mut std::vec::Vec<bool>,
-        result: &mut std::vec::Vec<IRNodeId>,
-    ) {
-        if visited[node_id] {
-            return;
-        }
-        visited[node_id] = true;
-        for output in graph.get_node(node_id).outputs() {
-            dfs(graph, *output, visited, result);
-        }
-        result.push(node_id);
-    }
-
-    dfs(graph, IR_START_ID, &mut visited, &mut result);
-
-    result.reverse();
-    result
-}
-
 pub fn traverse<'i, T>(ir: &IRGraph, visit: &mut T)
 where
     T: Visit,
@@ -275,7 +270,13 @@ pub trait Visit {
         ParentKind: IRNodeKind<'i>,
     {
         let mut outputs = parent.node().outputs().clone();
-        outputs.sort_by_key(|a| parent.ctx().topological_order().iter().position(|x| *x == *a));
+        outputs.sort_by_key(|a| {
+            parent
+                .ctx()
+                .topological_order()
+                .iter()
+                .position(|x| *x == *a)
+        });
 
         for output in outputs {
             self.visit_control(parent, output);
