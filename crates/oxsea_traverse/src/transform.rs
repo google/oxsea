@@ -1,4 +1,4 @@
-use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_START_ID};
+use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_INVALID_ID, IR_START_ID};
 
 use crate::{sort::reverse_topological_sort, Add, BindExport, Block, Compare, Constant, IfElse, LoadGlobal, Merge, Phi, Return};
 
@@ -134,6 +134,11 @@ where
         }
 
         let node = ir.get_node(node_id);
+        if node.is_dead_control() {
+            context.ids[node_id] = IR_INVALID_ID;
+            continue;
+        }
+
         let new_node_id = match node.instruction() {
             IRInstruction::Constant(value) => transform.visit_constant(
                 &Constant {
@@ -187,11 +192,13 @@ where
                 },
                 &mut out,
             ),
-            IRInstruction::IfElse => transform.visit_if_else(
+            IRInstruction::IfElse(None) => transform.visit_if_else(
                 &IfElse {
                     ctx: &context,
                     node_id,
                     node,
+
+                    resolved: &None,
                 },
                 &mut out,
             ),

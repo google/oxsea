@@ -178,8 +178,12 @@ impl<'a> Visit<'a> for FromAST<'a> {
         // First, collect the node for our test expression.
         self.visit_expression(&it.test);
         let condition = self.value_stack.pop().unwrap();
-        let consequent_id = self.ir.add_unlinked_block(0);
-        let alternate_id = self.ir.add_unlinked_block(1);
+        let branch_id = self.ir.add_if_else(
+            control_input,
+            condition,
+        );
+        let consequent_id = self.ir.add_block(branch_id, 0);
+        let alternate_id = self.ir.add_block(branch_id, 1);
 
         let original_symbol_table = self.symbol_table.clone();
 
@@ -196,12 +200,6 @@ impl<'a> Visit<'a> for FromAST<'a> {
             alternate_tail = self.control_tail;
         }
 
-        let branch_id = self.ir.add_if_else(
-            control_input,
-            condition,
-        );
-        self.ir.link_block(branch_id, consequent_id);
-        self.ir.link_block(branch_id, alternate_id);
         let merge_id = self.ir.add_merge(branch_id, &[consequent_tail, alternate_tail]);
 
         for (symbol, value) in self.symbol_table.iter_mut_enumerated() {

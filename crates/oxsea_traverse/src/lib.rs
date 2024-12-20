@@ -178,6 +178,8 @@ pub struct IfElse<'i> {
     ctx: &'i Context<'i>,
     node: &'i IRNode,
     node_id: IRNodeId,
+
+    resolved: &'i Option<bool>,
 }
 node_kind! { IfElse }
 
@@ -195,6 +197,10 @@ impl IfElse<'_> {
 
     pub fn continuation_id(&self) -> usize {
         self.node.outputs()[2]
+    }
+
+    pub fn resolved(&self) -> &Option<bool> {
+        self.resolved
     }
 }
 
@@ -339,6 +345,10 @@ pub trait Visit {
         ParentKind: IRNodeKind<'i>,
     {
         let node = parent.ctx().graph().get_node(node_id);
+        if node.is_dead_control() {
+            return;
+        }
+
         match node.instruction() {
             IRInstruction::Block(index) => {
                 self.visit_block(&Block {
@@ -349,11 +359,13 @@ pub trait Visit {
                     index: *index,
                 });
             }
-            IRInstruction::IfElse => {
+            IRInstruction::IfElse(resolved) => {
                 self.visit_if_else(&IfElse {
                     ctx: parent.ctx(),
                     node: node,
                     node_id,
+
+                    resolved,
                 });
             }
             IRInstruction::Merge(resolved_index) => {

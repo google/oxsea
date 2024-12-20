@@ -41,7 +41,7 @@ pub enum IRInstruction {
     Constant(CompileTimeValue),
     BindExport(String),
     LoadGlobal(String),
-    IfElse,
+    IfElse(Option<bool>),
     Block(usize),
     // Merge node, optionally resolved to a single branch.
     Merge(Option<usize>),
@@ -56,7 +56,7 @@ impl IRInstruction {
             | IRInstruction::Unreachable
             | IRInstruction::Return
             | IRInstruction::BindExport(_)
-            | IRInstruction::IfElse
+            | IRInstruction::IfElse(_)
             | IRInstruction::Block(_)
             | IRInstruction::Merge(_) => true,
             _ => false,
@@ -73,13 +73,6 @@ impl IRInstruction {
     pub fn is_unreachable(&self) -> bool {
         match self {
             IRInstruction::Unreachable => true,
-            _ => false,
-        }
-    }
-
-    fn is_linear_control_flow(&self) -> bool {
-        match self {
-            IRInstruction::Start | IRInstruction::Block(_) | IRInstruction::Merge(_) => true,
             _ => false,
         }
     }
@@ -215,15 +208,17 @@ impl IRNode {
         String::new()
     }
 
-    fn remove_branch(
-        &self,
-        graph: &mut IRGraph,
-        control_input_id: IRNodeId,
-        branch_id: IRNodeId,
-    ) -> Option<PeepholeResult> {
-        graph.add_linear_block(&[control_input_id], &[branch_id]);
-
-        Some(PeepholeResult::Existing(branch_id))
+    fn get_resolved_multi_output_index(&self) -> Option<(usize, IRNodeId)> {
+        match self.instruction {
+            IRInstruction::IfElse(Some(value)) => {
+                if value {
+                    Some((0, self.inputs[0]))
+                } else {
+                    Some((1, self.inputs[0]))
+                }
+            }
+            _ => None,
+        }
     }
 
     pub fn peephole_optimize(&self, graph: &mut IRGraph) -> Option<PeepholeResult> {
@@ -254,25 +249,25 @@ impl IRNode {
                         .map(|node| PeepholeResult::New(node));
                 }
             }
-            IRInstruction::IfElse => {
-                let control_input_id = self.inputs[0];
+            IRInstruction::IfElse(None) => {
                 let condition_node = &graph.nodes[self.inputs[1]];
-
-                if self.outputs.len() < 2 {
-                    return None;
-                }
 
                 if let IRInstruction::Constant(CompileTimeValue::Boolean(true)) =
                     &condition_node.instruction
                 {
-                    let branch_id = self.outputs[0];
-                    return self.remove_branch(graph, control_input_id, branch_id);
+                    return Some(PeepholeResult::New(IRNode {
+                        instruction: IRInstruction::IfElse(Some(true)),
+                        inputs: self.inputs.clone(),
+                        outputs: self.outputs.clone(),
+                    }));
                 } else if let IRInstruction::Constant(CompileTimeValue::Boolean(false)) =
                     &condition_node.instruction
                 {
-                    // Optimize to the alternate branch, if one exists.
-                    let branch_id = self.outputs[1];
-                    return self.remove_branch(graph, control_input_id, branch_id);
+                    return Some(PeepholeResult::New(IRNode {
+                        instruction: IRInstruction::IfElse(Some(false)),
+                        inputs: self.inputs.clone(),
+                        outputs: self.outputs.clone(),
+                    }));
                 }
             }
             IRInstruction::Merge(resolved) => {
@@ -296,6 +291,20 @@ impl IRNode {
                             };
                             return Some(PeepholeResult::New(node));
                         }
+
+                        // Check: if the branch point resolved?
+                        let branch_point = graph.get_node(branch_point_id);
+                        if let Some((active_index, _)) =
+                            branch_point.get_resolved_multi_output_index()
+                        {
+                            let resolved_tail_id = self.inputs[1 + active_index];
+                            let node = IRNode {
+                                instruction: IRInstruction::Merge(Some(active_index)),
+                                inputs: vec![resolved_tail_id],
+                                outputs: self.outputs.clone(),
+                            };
+                            return Some(PeepholeResult::New(node));
+                        }
                     }
                 }
             }
@@ -307,21 +316,22 @@ impl IRNode {
                     return Some(PeepholeResult::Existing(value_id));
                 }
             }
-            IRInstruction::Block(_) => {
-                if self.inputs.len() > 1 {
-                    panic!("Block with multiple inputs");
+            IRInstruction::Block(index) => {
+                if self.inputs.len() != 1 {
+                    panic!("Block without a single input: {:#?}", self);
                 }
 
-                if let Some(prev_id) = self.inputs.first() {
-                    // let prev_id = *prev_id;
-                    let prev_node = &graph.nodes[*prev_id];
-                    if prev_node.instruction.is_linear_control_flow() {
-                        // Just add this node's outputs to the existing flow.
-                        let outputs = self.outputs.clone();
-                        for output in outputs {
-                            graph.add_edge(*prev_id, output);
-                        }
-                        return Some(PeepholeResult::Existing(*prev_id));
+                let prev_id = self.inputs[0];
+                let prev_node = &graph.nodes[prev_id];
+                if let Some((active_index, ctrl_id)) = prev_node.get_resolved_multi_output_index() {
+                    if active_index == index {
+                        return Some(PeepholeResult::Existing(ctrl_id));
+                    } else {
+                        return Some(PeepholeResult::New(IRNode {
+                            instruction: IRInstruction::Unreachable,
+                            inputs: vec![],
+                            outputs: vec![],
+                        }));
                     }
                 }
             }
@@ -330,11 +340,8 @@ impl IRNode {
         None
     }
 
-    fn set_output(&mut self, proj_index: usize, proj_id: usize) {
-        if proj_index >= self.outputs.len() {
-            self.outputs.resize(proj_index + 1, IR_INVALID_ID);
-        }
-        self.outputs[proj_index] = proj_id;
+    pub fn is_dead_control(&self) -> bool {
+        self.instruction.is_control() && self.outputs.len() == 0
     }
 }
 
@@ -522,26 +529,17 @@ impl IRGraph {
         self.add_node(node)
     }
 
-    pub fn add_unlinked_block(&mut self, index: usize) -> IRNodeId {
-        let node = IRNode {
-            instruction: IRInstruction::Block(index),
-            inputs: vec![],
-            outputs: vec![],
-        };
-        self.add_node(node)
-    }
+    // pub fn link_block(&mut self, target_id: IRNodeId, proj_id: IRNodeId) {
+    //     let proj = &mut self.nodes[proj_id];
+    //     let proj_index = match proj.instruction() {
+    //         IRInstruction::Block(index) => *index,
+    //         _ => panic!("Expected block"),
+    //     };
+    //     proj.inputs = vec![target_id];
 
-    pub fn link_block(&mut self, target_id: IRNodeId, proj_id: IRNodeId) {
-        let proj = &mut self.nodes[proj_id];
-        let proj_index = match proj.instruction() {
-            IRInstruction::Block(index) => *index,
-            _ => panic!("Expected block"),
-        };
-        proj.inputs = vec![target_id];
-
-        let target = &mut self.nodes[target_id];
-        target.set_output(proj_index, proj_id);
-    }
+    //     let target = &mut self.nodes[target_id];
+    //     target.set_output(proj_index, proj_id);
+    // }
 
     pub fn add_linear_block(&mut self, inputs: &[IRNodeId], outputs: &[IRNodeId]) -> IRNodeId {
         let node = IRNode {
@@ -554,7 +552,7 @@ impl IRGraph {
 
     pub fn add_if_else(&mut self, control: IRNodeId, condition: IRNodeId) -> IRNodeId {
         let node = IRNode {
-            instruction: IRInstruction::IfElse,
+            instruction: IRInstruction::IfElse(None),
             inputs: vec![control, condition],
             outputs: vec![],
         };
@@ -650,8 +648,13 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
                 input_names.push("control".to_string());
                 input_names.push("value".to_string());
             }
-            IRInstruction::IfElse => {
+            IRInstruction::IfElse(None) => {
                 label.push_str("if");
+                input_names.push("control".to_string());
+                input_names.push("condition".to_string());
+            }
+            IRInstruction::IfElse(Some(val)) => {
+                label.push_str(&format!("if ({})", val));
                 input_names.push("control".to_string());
                 input_names.push("condition".to_string());
             }
@@ -798,19 +801,36 @@ mod tests {
     fn removes_dead_if_branch() {
         let mut ir = IRGraph::new();
         let cond = ir.add_constant(Boolean(false));
-        let consequent = ir.add_unlinked_block(0);
-        let alternate = ir.add_unlinked_block(1);
+        let branch_point = ir.add_if_else(IR_START_ID, cond);
+        let consequent = ir.add_block(branch_point, 0);
+        let alternate = ir.add_block(branch_point, 1);
         let two = ir.add_constant(Number(2.0));
         let three = ir.add_constant(Number(3.0));
-        let branch_point = ir.add_if_else(IR_START_ID, cond);
         let branch_merge = ir.add_merge(branch_point, &[consequent, alternate]);
-        ir.link_block(branch_point, consequent);
-        ir.link_block(branch_point, alternate);
         let phi = ir.add_phi(branch_merge, &[two, three]);
         ir.add_return(branch_merge, phi);
 
+        println!("{}", ir_to_dot(&ir));
+
         for i in 0..ir.len() {
-            assert!(ir.get_node(i).instruction != IRInstruction::IfElse);
+            assert!(
+                match ir.get_node(i).instruction {
+                    IRInstruction::IfElse(None) => false,
+                    _ => true,
+                },
+                "Found IfElse node at {}: {:#?}",
+                i,
+                ir.get_node(i)
+            );
+            assert!(
+                match ir.get_node(i).instruction {
+                    IRInstruction::Block(_) => false,
+                    _ => true,
+                },
+                "Found output select node at {}: {:#?}",
+                i,
+                ir.get_node(i)
+            );
         }
     }
 }
