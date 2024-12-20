@@ -259,8 +259,8 @@ impl<'i, 'o> IntoAST<'i, 'o> {
     ) -> Vec<'o, Statement<'o>> {
         self.ast.vec1(Statement::FunctionDeclaration(
             self.ast.alloc_function(
-                FunctionType::FunctionDeclaration,
                 Span::empty(0),
+                FunctionType::FunctionDeclaration,
                 Some(self.ast.binding_identifier(Span::empty(0), "f")),
                 false,
                 false,
