@@ -776,15 +776,14 @@ mod tests {
         let phi = ir.add_phi(branch_merge, &[two, three]);
         ir.add_return(branch_merge, phi);
 
-        println!("{}", ir_to_dot(&ir));
-
         for i in 0..ir.len() {
             assert!(
                 match ir.get_node(i).instruction {
                     IRInstruction::IfElse(None) => false,
+                    IRInstruction::IfElse(Some(_)) => ir.get_node(i).is_dead_control(),
                     _ => true,
                 },
-                "Found IfElse node at {}: {:#?}",
+                "Found alive IfElse node at {}: {:#?}",
                 i,
                 ir.get_node(i)
             );

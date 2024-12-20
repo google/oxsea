@@ -96,7 +96,11 @@ pub trait Transform {
             .unwrap_or_else(|| {
                 match merge.resolved_index() {
                     Some(value_index) => {
-                        out.add_resolved_merge(merge.branch_point_id(), *value_index)
+                        if merge.has_phi_outputs() {
+                            out.add_resolved_merge(merge.branch_point_id(), *value_index)
+                        } else {
+                            merge.branch_point_id()
+                        }
                     }
                     None => {
                         out.add_merge(merge.branch_point_id(), &merge.merge_input_ids())

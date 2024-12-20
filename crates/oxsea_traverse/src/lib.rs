@@ -241,11 +241,21 @@ impl Merge<'_> {
         }
     }
 
+    pub fn has_phi_outputs(&self) -> bool {
+        for output_id in self.node.outputs() {
+            let phi_node = self.ctx.graph().get_node(*output_id);
+            if *phi_node.instruction() == IRInstruction::Phi {
+                return true;
+            }
+        }
+        return false;
+    }
+
     pub fn resolved_index(&self) -> &Option<usize> {
         self.resolved_index
     }
 
-    fn merge_input_ids(&self) -> std::vec::Vec<IRNodeId> {
+    pub fn merge_input_ids(&self) -> std::vec::Vec<IRNodeId> {
         return self.node.inputs()[1..]
             .iter()
             .map(|x| self.ctx.node_id(*x))
