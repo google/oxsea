@@ -4,6 +4,14 @@ expression: code_snapshot
 input_file: crates/oxsea/tests/integration/fixtures/ts/if_else_true.ts
 snapshot_kind: text
 ---
-Φ8 = 3;
-Φ17 = Φ8 + 4;
-export default Φ17;
+if (true) {
+	Φ10 = 3;
+} else {
+	Φ10 = 1;
+}
+if (true) {
+	Φ20 = Φ10 + 4;
+} else {
+	Φ20 = Φ10 + 8;
+}
+export default Φ20;

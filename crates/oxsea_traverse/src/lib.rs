@@ -151,9 +151,8 @@ pub struct BindExport<'i> {
 node_kind! { BindExport }
 
 impl BindExport<'_> {
-    pub fn value_id(&self) -> IRNodeId {
-        self.node.inputs()[1]
-    }
+    input_id_accessor!(control_id, 0);
+    input_id_accessor!(value_id, 1);
 
     pub fn name(&self) -> &str {
         self.name
@@ -183,9 +182,8 @@ pub struct IfElse<'i> {
 node_kind! { IfElse }
 
 impl IfElse<'_> {
-    pub fn condition_id(&self) -> IRNodeId {
-        self.node.inputs()[1]
-    }
+    input_id_accessor!(control_id, 0);
+    input_id_accessor!(condition_id, 1);
 
     pub fn consequent_id(&self) -> IRNodeId {
         self.node.outputs()[0]
@@ -194,12 +192,25 @@ impl IfElse<'_> {
     pub fn alternate_id(&self) -> IRNodeId {
         self.node.outputs()[1]
     }
+
+    pub fn continuation_id(&self) -> usize {
+        self.node.outputs()[2]
+    }
 }
 
 pub struct Block<'i> {
     ctx: &'i Context<'i>,
     node: &'i IRNode,
     node_id: IRNodeId,
+
+    index: usize,
+}
+impl Block<'_> {
+    input_id_accessor!(control_id, 0);
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
 }
 node_kind! { Block }
 
@@ -207,8 +218,52 @@ pub struct Merge<'i> {
     ctx: &'i Context<'i>,
     node: &'i IRNode,
     node_id: IRNodeId,
+
+    merge_input_index: usize,
+    resolved_index: &'i Option<usize>,
 }
 node_kind! { Merge }
+
+impl Merge<'_> {
+    input_id_accessor!(branch_point_id, 0);
+
+    pub fn phi_index(&self) -> Option<usize> {
+        if self.merge_input_index == 0 {
+            None
+        } else {
+            Some(self.merge_input_index - 1)
+        }
+    }
+
+    pub fn resolved_index(&self) -> &Option<usize> {
+        self.resolved_index
+    }
+
+    fn merge_input_ids(&self) -> std::vec::Vec<IRNodeId> {
+        return self.node.inputs()[1..]
+            .iter()
+            .map(|x| self.ctx.node_id(*x))
+            .collect()
+    }
+}
+
+pub struct Phi<'i> {
+    ctx: &'i Context<'i>,
+    node: &'i IRNode,
+    node_id: IRNodeId,
+}
+node_kind! { Phi }
+
+impl Phi<'_> {
+    input_id_accessor!(control_id, 0);
+
+    pub fn value_ids(&self) -> std::vec::Vec<IRNodeId> {
+        return self.node.inputs()[1..]
+            .iter()
+            .map(|x| self.ctx.node_id(*x))
+            .collect()
+    }
+}
 
 pub struct PhiControl<'i> {
     ctx: &'i Context<'i>,
@@ -220,10 +275,6 @@ pub struct PhiControl<'i> {
 node_kind! { PhiControl }
 
 impl PhiControl<'_> {
-    pub fn control_input_id(&self) -> usize {
-        self.node.inputs()[self.phi_input_index]
-    }
-
     pub fn value_input_id(&self) -> IRNodeId {
         self.node.inputs()[self.phi_input_index + 1]
     }
@@ -289,11 +340,13 @@ pub trait Visit {
     {
         let node = parent.ctx().graph().get_node(node_id);
         match node.instruction() {
-            IRInstruction::Block => {
+            IRInstruction::Block(index) => {
                 self.visit_block(&Block {
                     ctx: parent.ctx(),
                     node: node,
                     node_id,
+
+                    index: *index,
                 });
             }
             IRInstruction::IfElse => {
@@ -303,9 +356,38 @@ pub trait Visit {
                     node_id,
                 });
             }
-            // IRInstruction::Merge => {
-            //     self.visit_merge(parent_id, node_id, ctx);
-            // }
+            IRInstruction::Merge(resolved_index) => {
+                let parent_id = parent.node_id();
+
+                if let Some(value_idx) = resolved_index {
+                    // Visit the node twice: Once to mark the resolution and once to continue the control flow.
+                    self.visit_merge(&Merge {
+                        ctx: parent.ctx(),
+                        node: node,
+                        node_id,
+                        merge_input_index: 0,
+                        resolved_index,
+                    });
+                    self.visit_merge(&Merge {
+                        ctx: parent.ctx(),
+                        node: node,
+                        node_id,
+                        merge_input_index: value_idx + 1,
+                        resolved_index,
+                    });
+                } else {
+                    let merge_input_index = node.inputs().iter().position(|x| *x == parent_id);
+                    if let Some(merge_input_index) = merge_input_index {
+                        self.visit_merge(&Merge {
+                            ctx: parent.ctx(),
+                            node: node,
+                            node_id,
+                            merge_input_index,
+                            resolved_index,
+                        });
+                    }
+                }
+            }
             IRInstruction::BindExport(name) => {
                 self.visit_bind_export(&BindExport {
                     ctx: parent.ctx(),
@@ -320,18 +402,6 @@ pub trait Visit {
                     node: node,
                     node_id,
                 });
-            }
-            IRInstruction::Phi => {
-                let parent_id = parent.node_id();
-                let phi_input_index = node.inputs().iter().position(|x| *x == parent_id);
-                if let Some(phi_input_index) = phi_input_index {
-                    self.visit_phi_control(&PhiControl {
-                        ctx: parent.ctx(),
-                        node: node,
-                        node_id,
-                        phi_input_index,
-                    });
-                }
             }
             IRInstruction::End => {
                 self.visit_end(&End {
@@ -446,20 +516,42 @@ pub trait Visit {
         let alternate_id = if_else.alternate_id();
         self.visit_control(if_else, alternate_id);
 
+        // 4. Visit post-block continuation.
+        let cont_id = if_else.continuation_id();
+        self.visit_control(if_else, cont_id);
+
         leave_node!(self, if_else);
     }
 
-    fn visit_merge(&mut self, parent_id: IRNodeId, node_id: IRNodeId, ctx: &Context) {
-        self.walk_merge(parent_id, node_id, ctx);
+    fn visit_merge(&mut self, merge: &Merge) {
+        self.walk_merge(merge);
     }
 
-    fn walk_merge(&mut self, _parent_id: IRNodeId, node_id: IRNodeId, ctx: &Context) {
-        self.enter_node(node_id, ctx.graph().get_node(node_id));
+    fn walk_merge(&mut self, merge: &Merge) {
+        enter_node!(self, merge);
 
-        // Visit all children as statements:
-        // self.visit_control_outputs(node_id, ctx);
+        match merge.phi_index() {
+            Some(phi_input_index) => {
+                for output_id in merge.node.outputs() {
+                    let phi_id = *output_id;
+                    let phi_node = merge.ctx().graph().get_node(phi_id);
+                    if *phi_node.instruction() == IRInstruction::Phi {
+                        self.visit_phi_control(&PhiControl {
+                            ctx: merge.ctx(),
+                            node: phi_node,
+                            node_id: phi_id,
+                            phi_input_index,
+                        });
+                    }
+                }
+            }
+            None => {
+                // This is a continuation of control flow.
+                self.visit_control_outputs(merge);
+            }
+        }
 
-        self.leave_node(node_id, ctx.graph().get_node(node_id));
+        leave_node!(self, merge);
     }
 
     fn visit_bind_export(&mut self, bind_export: &BindExport) {

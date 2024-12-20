@@ -7,6 +7,7 @@ edition = "2021"
 oxsea_ir = { path = "../oxsea_ir" }
 oxsea_from_ast = { path = "../oxsea_from_ast" }
 oxsea_into_ast = { path = "../oxsea_into_ast" }
+oxsea_traverse = { path = "../oxsea_traverse" }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["glob"] }

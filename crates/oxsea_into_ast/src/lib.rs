@@ -26,7 +26,8 @@ use oxc_ast::ast::{
 use oxc_ast::AstBuilder;
 use oxsea_ir::{CompileTimeValue, IRGraph};
 use oxsea_traverse::{
-    traverse, Add, BindExport, Compare, Constant, IRNodeKind, IfElse, LoadGlobal, PhiControl, PhiValue, Return, Visit
+    traverse, Add, BindExport, Compare, Constant, IRNodeKind, IfElse, LoadGlobal, PhiControl,
+    PhiValue, Return, Visit,
 };
 
 struct IntoAST<'i, 'o> {
@@ -211,6 +212,8 @@ impl Visit for IntoAST<'_, '_> {
                 },
             ),
         ));
+
+        self.visit_control(if_else, if_else.continuation_id());
     }
 }
 
@@ -319,7 +322,7 @@ mod tests {
     use super::*;
 
     use oxc_codegen::{CodeGenerator, CodegenOptions};
-    use oxsea_ir::IR_START_ID;
+    use oxsea_ir::{ir_to_dot, IR_START_ID};
 
     fn convert_and_print(graph: &IRGraph, as_func: bool) -> String {
         let allocator = Allocator::default();
@@ -346,7 +349,7 @@ mod tests {
     fn export_default() {
         let mut ir = IRGraph::new();
         let value = ir.add_constant(oxsea_ir::CompileTimeValue::Number(2.0));
-        ir.add_bind_export("default".to_string(), value);
+        ir.add_bind_export(IR_START_ID, "default".to_string(), value);
         let code = convert_and_print(&ir, false);
         assert_eq!(code, "export default 2;\n");
     }
@@ -357,22 +360,73 @@ mod tests {
         let a = ir.add_constant(oxsea_ir::CompileTimeValue::Number(2.0));
         let b = ir.add_constant(oxsea_ir::CompileTimeValue::Number(4.0));
         let cond = ir.add_load_global("cond".to_string());
-        let consequent_id = ir.add_block();
-        let alternate_id = ir.add_block();
-        let phi = ir.add_phi(&[consequent_id, a, alternate_id, b]);
-        ir.add_if_else(
+        let consequent_id = ir.add_unlinked_block(0);
+        let alternate_id = ir.add_unlinked_block(1);
+        let branch = ir.add_if_else(
             IR_START_ID,
             cond,
-            consequent_id,
-            alternate_id,
-            consequent_id,
-            alternate_id,
         );
-        ir.add_bind_export("default".to_string(), phi);
+        ir.link_block(branch, consequent_id);
+        ir.link_block(branch, alternate_id);
+        let merge = ir.add_merge(branch, &[consequent_id, alternate_id]);
+        let phi = ir.add_phi(merge, &[a, b]);
+        ir.add_bind_export(merge, "default".to_string(), phi);
         let code = convert_and_print(&ir, false);
         assert_eq!(
             code,
-            "if (cond) {\n\tΦ7 = 2;\n} else {\n\tΦ7 = 4;\n}\nexport default Φ7;\n"
+            "if (cond) {\n\
+            \tΦ9 = 2;\n\
+            } else {\n\
+            \tΦ9 = 4;\n\
+            }\n\
+            export default Φ9;\n"
+        );
+    }
+
+    #[test]
+    fn nested_phi() {
+        let mut ir = IRGraph::new();
+        let n1 = ir.add_constant(oxsea_ir::CompileTimeValue::Number(1.0));
+        let n2 = ir.add_constant(oxsea_ir::CompileTimeValue::Number(2.0));
+        let n4 = ir.add_constant(oxsea_ir::CompileTimeValue::Number(4.0));
+        let n8 = ir.add_constant(oxsea_ir::CompileTimeValue::Number(8.0));
+        let cond1 = ir.add_load_global("cond1".to_string());
+        let cond2 = ir.add_load_global("cond2".to_string());
+
+        let b1 = ir.add_unlinked_block(0);
+        let b2 = ir.add_unlinked_block(1);
+        let b1_b2_branch = ir.add_if_else(IR_START_ID, cond1);
+        ir.link_block(b1_b2_branch, b1);
+        ir.link_block(b1_b2_branch, b2);
+        let b1_b2 = ir.add_merge(b1_b2_branch, &[b1, b2]);
+        let phi_1_2 = ir.add_phi(b1_b2, &[n1, n2]);
+
+        let add_1_or_2_to_4 = ir.add_add(n4, phi_1_2);
+
+        let b4 = ir.add_unlinked_block(0);
+        let b8 = ir.add_unlinked_block(1);
+        let b4_b8_branch = ir.add_if_else(b1_b2, cond2);
+        ir.link_block(b4_b8_branch, b4);
+        ir.link_block(b4_b8_branch, b8);
+        let b4_b8 = ir.add_merge(b4_b8_branch, &[b4, b8]);
+        let phi_or_8 = ir.add_phi(b4_b8, &[add_1_or_2_to_4, n8]);
+
+        ir.add_bind_export(b4_b8, "default".to_string(), phi_or_8);
+        let code = convert_and_print(&ir, false);
+        println!("{}", ir_to_dot(&ir));
+        assert_eq!(
+            code,
+            "if (cond1) {\n\
+            \tΦ12 = 1;\n\
+            } else {\n\
+            \tΦ12 = 2;\n\
+            }\n\
+            if (cond2) {\n\
+            \tΦ18 = 4 + Φ12;\n\
+            } else {\n\
+            \tΦ18 = 8;\n\
+            }\n\
+            export default Φ18;\n"
         );
     }
 }

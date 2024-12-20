@@ -19,6 +19,7 @@ use oxc_parser::Parser;
 use oxsea_from_ast::ir_from_ast;
 use oxsea_into_ast::ir_into_ast;
 use oxsea_ir::{ir_to_dot, IRGraph};
+use oxsea_traverse::transform::{transform, Transform};
 use std::fs;
 
 fn ir_from_source(source: &str) -> oxsea_ir::IRGraph {
@@ -38,19 +39,36 @@ fn convert_and_print(graph: &IRGraph) -> String {
     printed.code
 }
 
+struct CopyTransform {}
+
+impl Transform for CopyTransform {}
+
+fn copy_ir(ir: &IRGraph) -> IRGraph {
+    let mut copy_transform = CopyTransform {};
+    transform(&ir, &mut copy_transform)
+}
+
 #[test]
 fn main() {
     insta::glob!("fixtures/**/*.{js,ts,jsx,tsx}", |path| {
         let code = fs::read_to_string(path).unwrap();
         let name = path.file_stem().unwrap().to_str().unwrap();
         let ir = ir_from_source(&code);
+
         let dot_snapshot = format!("{}\n", ir_to_dot(&ir));
         insta::with_settings!({ snapshot_path => path.parent().unwrap(), prepend_module_to_snapshot => false, snapshot_suffix => "ir" }, {
             insta::assert_snapshot!(name, dot_snapshot);
         });
+
         let code_snapshot = convert_and_print(&ir);
         insta::with_settings!({ snapshot_path => path.parent().unwrap(), prepend_module_to_snapshot => false, snapshot_suffix => "out" }, {
             insta::assert_snapshot!(name, code_snapshot);
+        });
+
+        let ir_copy = copy_ir(&ir);
+        let copy_dot_snapshot = format!("{}\n", ir_to_dot(&ir_copy));
+        insta::with_settings!({ snapshot_path => path.parent().unwrap(), prepend_module_to_snapshot => false, snapshot_suffix => "copy" }, {
+            insta::assert_snapshot!(name, copy_dot_snapshot);
         });
     });
 }

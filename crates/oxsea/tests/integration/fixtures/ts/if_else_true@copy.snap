@@ -1,0 +1,59 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: copy_dot_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/if_else_true.ts
+snapshot_kind: text
+---
+digraph {
+  fontname="Helvetica,Arial,sans-serif";
+  node [fontname="Helvetica,Arial,sans-serif"];
+  edge [fontname="Helvetica,Arial,sans-serif"];
+  n0 [label="", shape=circle, style=filled, fillcolor="#fff", height=0.3, width=0.3, penwidth=5];
+  n20 -> n0:i0;
+  n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
+  n2 [shape=box, label="= true"] [style=rounded];
+  n3 [shape=record, label="{{<i0> control|<i1> condition}|if}"] [style=filled, fillcolor="#ffffaa"];
+  n1 -> n3:i0;
+  n2 -> n3:i1;
+  n4 [shape=box, label="outputs[0]"] [style=filled, fillcolor="#ffffaa"];
+  n3 -> n4:i0;
+  n5 [shape=box, label="outputs[1]"] [style=filled, fillcolor="#ffffaa"];
+  n3 -> n5:i0;
+  n6 [shape=record, label="{{<i0> br|<i1> alt[0]|<i2> alt[1]}|merge}"] [style=filled, fillcolor="#ffffaa"];
+  n3 -> n6:i0;
+  n4 -> n6:i1;
+  n5 -> n6:i2;
+  n7 [shape=box, label="= true"] [style=rounded];
+  n8 [shape=record, label="{{<i0> control|<i1> condition}|if}"] [style=filled, fillcolor="#ffffaa"];
+  n6 -> n8:i0;
+  n7 -> n8:i1;
+  n9 [shape=box, label="outputs[0]"] [style=filled, fillcolor="#ffffaa"];
+  n8 -> n9:i0;
+  n10 [shape=box, label="outputs[1]"] [style=filled, fillcolor="#ffffaa"];
+  n8 -> n10:i0;
+  n11 [shape=record, label="{{<i0> br|<i1> alt[0]|<i2> alt[1]}|merge}"] [style=filled, fillcolor="#ffffaa"];
+  n8 -> n11:i0;
+  n9 -> n11:i1;
+  n10 -> n11:i2;
+  n12 [shape=box, label="= 3.0"] [style=rounded];
+  n13 [shape=box, label="= 1.0"] [style=rounded];
+  n14 [shape=record, label="{{<i0> c|<i1> v0|<i2> v1}|Φ}"] [style=rounded];
+  n6 -> n14:i0;
+  n12 -> n14:i1;
+  n13 -> n14:i2;
+  n15 [shape=box, label="= 4.0"] [style=rounded];
+  n16 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
+  n14 -> n16:i0;
+  n15 -> n16:i1;
+  n17 [shape=box, label="= 8.0"] [style=rounded];
+  n18 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
+  n14 -> n18:i0;
+  n17 -> n18:i1;
+  n19 [shape=record, label="{{<i0> c|<i1> v0|<i2> v1}|Φ}"] [style=rounded];
+  n11 -> n19:i0;
+  n16 -> n19:i1;
+  n18 -> n19:i2;
+  n20 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n11 -> n20:i0;
+  n19 -> n20:i1;
+}

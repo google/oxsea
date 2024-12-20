@@ -535,6 +535,7 @@ dependencies = [
  "oxsea_from_ast",
  "oxsea_into_ast",
  "oxsea_ir",
+ "oxsea_traverse",
 ]
 
 [[package]]

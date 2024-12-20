@@ -162,7 +162,8 @@ impl<'a> Visit<'a> for FromAST<'a> {
             }
             AstKind::ExportDefaultDeclaration(_) => {
                 let value = self.value_stack.pop().unwrap();
-                self.ir.add_bind_export("default".to_string(), value);
+                self.ir
+                    .add_bind_export(self.control_tail, "default".to_string(), value);
             }
             _ => { /* Ignore other nodes. */ }
         }
@@ -177,8 +178,8 @@ impl<'a> Visit<'a> for FromAST<'a> {
         // First, collect the node for our test expression.
         self.visit_expression(&it.test);
         let condition = self.value_stack.pop().unwrap();
-        let consequent_id = self.ir.add_block();
-        let alternate_id = self.ir.add_block();
+        let consequent_id = self.ir.add_unlinked_block(0);
+        let alternate_id = self.ir.add_unlinked_block(1);
 
         let original_symbol_table = self.symbol_table.clone();
 
@@ -195,25 +196,23 @@ impl<'a> Visit<'a> for FromAST<'a> {
             alternate_tail = self.control_tail;
         }
 
+        let branch_id = self.ir.add_if_else(
+            control_input,
+            condition,
+        );
+        self.ir.link_block(branch_id, consequent_id);
+        self.ir.link_block(branch_id, alternate_id);
+        let merge_id = self.ir.add_merge(branch_id, &[consequent_tail, alternate_tail]);
+
         for (symbol, value) in self.symbol_table.iter_mut_enumerated() {
             let consequent_value = consequent_symbol_table[symbol];
             if consequent_value != *value {
                 // If the symbol has diverged, create a phi node for it.
-                let phi = self
-                    .ir
-                    .add_phi(&[consequent_id, consequent_value, alternate_id, *value]);
+                let phi = self.ir.add_phi(merge_id, &[consequent_value, *value]);
                 *value = phi;
             }
         }
 
-        let merge_id = self.ir.add_if_else(
-            control_input,
-            condition,
-            consequent_id,
-            alternate_id,
-            consequent_tail,
-            alternate_tail,
-        );
         self.control_tail = merge_id;
     }
 }
@@ -243,7 +242,8 @@ impl<'i> FromAST<'i> {
             }
             if let Some(export_name) = self.named_exports.get(&symbol_id) {
                 let value = self.symbol_table[symbol_id];
-                self.ir.add_bind_export(export_name.clone(), value);
+                self.ir
+                    .add_bind_export(self.control_tail, export_name.clone(), value);
             }
         }
     }

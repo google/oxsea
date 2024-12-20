@@ -1,6 +1,6 @@
 use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_START_ID};
 
-use crate::{sort::reverse_topological_sort, Constant, Return};
+use crate::{sort::reverse_topological_sort, Add, BindExport, Block, Compare, Constant, IfElse, LoadGlobal, Merge, Phi, Return};
 
 pub trait Transform {
     fn visit_constant(&mut self, constant: &Constant, out: &mut IRGraph) -> IRNodeId {
@@ -18,6 +18,103 @@ pub trait Transform {
     }
 
     fn transform_return(&mut self, _ret: &Return, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_bind_export(&mut self, bind_export: &BindExport, out: &mut IRGraph) -> IRNodeId {
+        self.transform_bind_export(bind_export, out)
+            .unwrap_or_else(|| {
+                out.add_bind_export(
+                    bind_export.control_id(),
+                    bind_export.name().to_string(),
+                    bind_export.value_id(),
+                )
+            })
+    }
+
+    fn transform_bind_export(
+        &mut self,
+        _bind_export: &BindExport,
+        _out: &mut IRGraph,
+    ) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_load_global(&mut self, load_global: &LoadGlobal, out: &mut IRGraph) -> IRNodeId {
+        self.transform_load_global(load_global, out)
+            .unwrap_or_else(|| out.add_load_global(load_global.name().to_string()))
+    }
+
+    fn transform_load_global(
+        &mut self,
+        _load_global: &LoadGlobal,
+        _out: &mut IRGraph,
+    ) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_compare(&mut self, compare: &Compare, out: &mut IRGraph) -> IRNodeId {
+        self.transform_compare(compare, out).unwrap_or_else(|| {
+            out.add_compare(compare.left_id(), compare.right_id(), *compare.operator())
+        })
+    }
+
+    fn transform_compare(&mut self, _compare: &Compare, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_add(&mut self, add: &Add, out: &mut IRGraph) -> IRNodeId {
+        self.transform_add(add, out).unwrap_or_else(|| {
+            out.add_add(add.left_id(), add.right_id())
+        })
+    }
+
+    fn transform_add(&mut self, _add: &Add, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_if_else(&mut self, if_else: &IfElse, out: &mut IRGraph) -> IRNodeId {
+        self.transform_if_else(if_else, out)
+            .unwrap_or_else(|| out.add_if_else(if_else.control_id(), if_else.condition_id()))
+    }
+
+    fn transform_if_else(&mut self, _if_else: &IfElse, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_block(&mut self, block: &Block, out: &mut IRGraph) -> IRNodeId {
+        self.transform_block(block, out)
+            .unwrap_or_else(|| out.add_block(block.control_id(), block.index()))
+    }
+
+    fn transform_block(&mut self, _block: &Block, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_merge(&mut self, merge: &Merge, out: &mut IRGraph) -> IRNodeId {
+        self.transform_merge(merge, out)
+            .unwrap_or_else(|| {
+                match merge.resolved_index() {
+                    Some(value_index) => {
+                        out.add_resolved_merge(merge.branch_point_id(), *value_index)
+                    }
+                    None => {
+                        out.add_merge(merge.branch_point_id(), &merge.merge_input_ids())
+                    }
+                }
+            })
+    }
+
+    fn transform_merge(&mut self, _merge: &Merge, _out: &mut IRGraph) -> Option<IRNodeId> {
+        None
+    }
+
+    fn visit_phi(&mut self, phi: &Phi, out: &mut IRGraph) -> IRNodeId {
+        self.transform_phi(phi, out)
+            .unwrap_or_else(|| out.add_phi(phi.control_id(), &phi.value_ids()))
+    }
+
+    fn transform_phi(&mut self, _phi: &Phi, _out: &mut IRGraph) -> Option<IRNodeId> {
         None
     }
 }
@@ -49,6 +146,78 @@ where
             ),
             IRInstruction::Return => transform.visit_return(
                 &Return {
+                    ctx: &context,
+                    node_id,
+                    node,
+                },
+                &mut out,
+            ),
+            IRInstruction::BindExport(name) => transform.visit_bind_export(
+                &BindExport {
+                    ctx: &context,
+                    node_id,
+                    node,
+                    name,
+                },
+                &mut out,
+            ),
+            IRInstruction::LoadGlobal(name) => transform.visit_load_global(
+                &LoadGlobal {
+                    ctx: &context,
+                    node_id,
+                    node,
+                    name,
+                },
+                &mut out,
+            ),
+            IRInstruction::Compare(op) => transform.visit_compare(
+                &Compare {
+                    ctx: &context,
+                    node_id,
+                    node,
+                    operator: op,
+                },
+                &mut out,
+            ),
+            IRInstruction::Add => transform.visit_add(
+                &Add {
+                    ctx: &context,
+                    node_id,
+                    node,
+                },
+                &mut out,
+            ),
+            IRInstruction::IfElse => transform.visit_if_else(
+                &IfElse {
+                    ctx: &context,
+                    node_id,
+                    node,
+                },
+                &mut out,
+            ),
+            IRInstruction::Block(index) => transform.visit_block(
+                &Block {
+                    ctx: &context,
+                    node_id,
+                    node,
+
+                    index: *index,
+                },
+                &mut out,
+            ),
+            IRInstruction::Merge(resolved_index) => transform.visit_merge(
+                &Merge {
+                    ctx: &context,
+                    node_id,
+                    node,
+
+                    merge_input_index: 0,
+                    resolved_index,
+                },
+                &mut out,
+            ),
+            IRInstruction::Phi => transform.visit_phi(
+                &Phi {
                     ctx: &context,
                     node_id,
                     node,
