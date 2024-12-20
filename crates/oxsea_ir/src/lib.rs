@@ -327,8 +327,23 @@ impl IRNode {
         None
     }
 
+    pub fn is_dead_value(&self) -> bool {
+        !self.instruction.is_control() && self.outputs.len() == 0
+    }
+
     pub fn is_dead_control(&self) -> bool {
-        self.instruction.is_control() && self.outputs.len() == 0
+        match self.instruction {
+            // Start and End are never dead.
+            IRInstruction::End | IRInstruction::Start => false,
+            _ => {
+                // Unless the control node comes from somewhere AND goes somewhere, it's dead.
+                self.instruction.is_control() && (self.inputs.len() == 0 || self.outputs.len() == 0)
+            }
+        }
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.is_dead_control() || self.is_dead_value()
     }
 }
 
@@ -605,8 +620,13 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
             }
             IRInstruction::Unreachable => {
                 dot.push_str(&format!(
-                    "[label=\"never\", shape=hexagon, style=filled, fillcolor=\"#fcc\"]"
+                    "[label=\"never\", shape=hexagon, fillcolor=\"#fcc\"]"
                 ));
+                if node.is_dead() {
+                    dot.push_str(" [style=\"filled, dashed\"]");
+                } else {
+                    dot.push_str(" [style=filled]");
+                }
                 use_default_shape = false;
             }
             IRInstruction::Return => {
@@ -701,9 +721,8 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
         }
 
         if use_default_shape {
-            let is_unused = node.instruction != IRInstruction::End && node.outputs().len() == 0;
+            let is_unused = node.is_dead();
             let has_named_inputs = input_names.len() > 0;
-            // n7 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}", style=filled, fillcolor="#ffffaa"];
             if has_named_inputs {
                 dot.push_str(&"[shape=record, label=\"{{");
                 for (input_idx, input_name) in input_names.iter().enumerate() {

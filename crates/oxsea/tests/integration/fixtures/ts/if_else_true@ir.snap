@@ -17,7 +17,7 @@ digraph {
   n4 [shape=record, label="{{<i0> control|<i1> condition}|if (true)}"] [style="filled, dashed", fillcolor="#ffffaa"];
   n1 -> n4:i0;
   n3 -> n4:i1;
-  n5 [label="never", shape=hexagon, style=filled, fillcolor="#fcc"];
+  n5 [label="never", shape=hexagon, fillcolor="#fcc"] [style="filled, dashed"];
   n6 [shape=box, label="= 2.0"] [style="rounded, dashed"];
   n7 [shape=box, label="= 3.0"] [style="rounded, dashed"];
   n8 [fontcolor=gray, color=gray][shape=box, label="merge = 0"] [style=filled, fillcolor="#ffffaa"];
@@ -26,7 +26,7 @@ digraph {
   n10 [shape=record, label="{{<i0> control|<i1> condition}|if (true)}"] [style="filled, dashed", fillcolor="#ffffaa"];
   n8 -> n10:i0;
   n9 -> n10:i1;
-  n11 [label="never", shape=hexagon, style=filled, fillcolor="#fcc"];
+  n11 [label="never", shape=hexagon, fillcolor="#fcc"] [style="filled, dashed"];
   n12 [shape=box, label="= 4.0"] [style="rounded, dashed"];
   n13 [shape=box, label="= 7.0"] [style=rounded];
   n14 [shape=box, label="= 8.0"] [style="rounded, dashed"];
