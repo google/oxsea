@@ -182,8 +182,8 @@ impl<'a> Visit<'a> for FromAST<'a> {
             control_input,
             condition,
         );
-        let consequent_id = self.ir.add_block(branch_id, 0);
-        let alternate_id = self.ir.add_block(branch_id, 1);
+        let consequent_id = self.ir.add_proj(branch_id, 0);
+        let alternate_id = self.ir.add_proj(branch_id, 1);
 
         let original_symbol_table = self.symbol_table.clone();
 

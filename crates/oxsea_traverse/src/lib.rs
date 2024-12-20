@@ -204,21 +204,21 @@ impl IfElse<'_> {
     }
 }
 
-pub struct Block<'i> {
+pub struct Proj<'i> {
     ctx: &'i Context<'i>,
     node: &'i IRNode,
     node_id: IRNodeId,
 
     index: usize,
 }
-impl Block<'_> {
+impl Proj<'_> {
     input_id_accessor!(control_id, 0);
 
     pub fn index(&self) -> usize {
         self.index
     }
 }
-node_kind! { Block }
+node_kind! { Proj }
 
 pub struct Merge<'i> {
     ctx: &'i Context<'i>,
@@ -350,8 +350,8 @@ pub trait Visit {
         }
 
         match node.instruction() {
-            IRInstruction::Block(index) => {
-                self.visit_block(&Block {
+            IRInstruction::Proj(index) => {
+                self.visit_proj(&Proj {
                     ctx: parent.ctx(),
                     node: node,
                     node_id,
@@ -496,17 +496,17 @@ pub trait Visit {
         enter_node!(self, end);
     }
 
-    fn visit_block(&mut self, block: &Block) {
-        self.walk_block(block);
+    fn visit_proj(&mut self, proj: &Proj) {
+        self.walk_proj(proj);
     }
 
-    fn walk_block(&mut self, block: &Block) {
-        enter_node!(self, block);
+    fn walk_proj(&mut self, proj: &Proj) {
+        enter_node!(self, proj);
 
         // Visit all children as statements:
-        self.visit_control_outputs(block);
+        self.visit_control_outputs(proj);
 
-        enter_node!(self, block);
+        enter_node!(self, proj);
     }
 
     fn visit_if_else(&mut self, if_else: &IfElse) {
@@ -528,7 +528,7 @@ pub trait Visit {
         let alternate_id = if_else.alternate_id();
         self.visit_control(if_else, alternate_id);
 
-        // 4. Visit post-block continuation.
+        // 4. Visit post-merge continuation.
         let cont_id = if_else.continuation_id();
         self.visit_control(if_else, cont_id);
 

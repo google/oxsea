@@ -364,8 +364,8 @@ mod tests {
             IR_START_ID,
             cond,
         );
-        let consequent_id = ir.add_block(branch, 0);
-        let alternate_id = ir.add_block(branch, 1);
+        let consequent_id = ir.add_proj(branch, 0);
+        let alternate_id = ir.add_proj(branch, 1);
         let merge = ir.add_merge(branch, &[consequent_id, alternate_id]);
         let phi = ir.add_phi(merge, &[a, b]);
         ir.add_bind_export(merge, "default".to_string(), phi);
@@ -392,16 +392,16 @@ mod tests {
         let cond2 = ir.add_load_global("cond2".to_string());
 
         let b1_b2_branch = ir.add_if_else(IR_START_ID, cond1);
-        let b1 = ir.add_block(b1_b2_branch, 0);
-        let b2 = ir.add_block(b1_b2_branch, 1);
+        let b1 = ir.add_proj(b1_b2_branch, 0);
+        let b2 = ir.add_proj(b1_b2_branch, 1);
         let b1_b2 = ir.add_merge(b1_b2_branch, &[b1, b2]);
         let phi_1_2 = ir.add_phi(b1_b2, &[n1, n2]);
 
         let add_1_or_2_to_4 = ir.add_add(n4, phi_1_2);
 
         let b4_b8_branch = ir.add_if_else(b1_b2, cond2);
-        let b4 = ir.add_block(b4_b8_branch, 0);
-        let b8 = ir.add_block(b4_b8_branch, 1);
+        let b4 = ir.add_proj(b4_b8_branch, 0);
+        let b8 = ir.add_proj(b4_b8_branch, 1);
         let b4_b8 = ir.add_merge(b4_b8_branch, &[b4, b8]);
         let phi_or_8 = ir.add_phi(b4_b8, &[add_1_or_2_to_4, n8]);
 

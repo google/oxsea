@@ -42,7 +42,7 @@ pub enum IRInstruction {
     BindExport(String),
     LoadGlobal(String),
     IfElse(Option<bool>),
-    Block(usize),
+    Proj(usize),
     // Merge node, optionally resolved to a single branch.
     Merge(Option<usize>),
     Phi,
@@ -57,7 +57,7 @@ impl IRInstruction {
             | IRInstruction::Return
             | IRInstruction::BindExport(_)
             | IRInstruction::IfElse(_)
-            | IRInstruction::Block(_)
+            | IRInstruction::Proj(_)
             | IRInstruction::Merge(_) => true,
             _ => false,
         }
@@ -278,21 +278,8 @@ impl IRNode {
                         // Ignored for now.
                     }
                     None => {
-                        let branch_point_id = self.inputs[0];
-                        let merging_ids = &self.inputs[1..];
-
-                        if let Some(resolved_idx) =
-                            merging_ids.iter().position(|id| *id == branch_point_id)
-                        {
-                            let node = IRNode {
-                                instruction: IRInstruction::Merge(Some(resolved_idx)),
-                                inputs: vec![branch_point_id],
-                                outputs: self.outputs.clone(),
-                            };
-                            return Some(PeepholeResult::New(node));
-                        }
-
                         // Check: if the branch point resolved?
+                        let branch_point_id = self.inputs[0];
                         let branch_point = graph.get_node(branch_point_id);
                         if let Some((active_index, _)) =
                             branch_point.get_resolved_multi_output_index()
@@ -316,9 +303,9 @@ impl IRNode {
                     return Some(PeepholeResult::Existing(value_id));
                 }
             }
-            IRInstruction::Block(index) => {
+            IRInstruction::Proj(index) => {
                 if self.inputs.len() != 1 {
-                    panic!("Block without a single input: {:#?}", self);
+                    panic!("Proj without a single input: {:#?}", self);
                 }
 
                 let prev_id = self.inputs[0];
@@ -520,32 +507,11 @@ impl IRGraph {
         self.add_node(node)
     }
 
-    pub fn add_block(&mut self, control_id: IRNodeId, index: usize) -> IRNodeId {
+    pub fn add_proj(&mut self, control_id: IRNodeId, index: usize) -> IRNodeId {
         let node = IRNode {
-            instruction: IRInstruction::Block(index),
+            instruction: IRInstruction::Proj(index),
             inputs: vec![control_id],
             outputs: vec![],
-        };
-        self.add_node(node)
-    }
-
-    // pub fn link_block(&mut self, target_id: IRNodeId, proj_id: IRNodeId) {
-    //     let proj = &mut self.nodes[proj_id];
-    //     let proj_index = match proj.instruction() {
-    //         IRInstruction::Block(index) => *index,
-    //         _ => panic!("Expected block"),
-    //     };
-    //     proj.inputs = vec![target_id];
-
-    //     let target = &mut self.nodes[target_id];
-    //     target.set_output(proj_index, proj_id);
-    // }
-
-    pub fn add_linear_block(&mut self, inputs: &[IRNodeId], outputs: &[IRNodeId]) -> IRNodeId {
-        let node = IRNode {
-            instruction: IRInstruction::Block(0),
-            inputs: Vec::from(inputs),
-            outputs: Vec::from(outputs),
         };
         self.add_node(node)
     }
@@ -673,7 +639,7 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
                     }
                 }
             }
-            IRInstruction::Block(index) => {
+            IRInstruction::Proj(index) => {
                 label.push_str(&format!("outputs[{}]", index));
             }
             IRInstruction::Phi => {
@@ -802,8 +768,8 @@ mod tests {
         let mut ir = IRGraph::new();
         let cond = ir.add_constant(Boolean(false));
         let branch_point = ir.add_if_else(IR_START_ID, cond);
-        let consequent = ir.add_block(branch_point, 0);
-        let alternate = ir.add_block(branch_point, 1);
+        let consequent = ir.add_proj(branch_point, 0);
+        let alternate = ir.add_proj(branch_point, 1);
         let two = ir.add_constant(Number(2.0));
         let three = ir.add_constant(Number(3.0));
         let branch_merge = ir.add_merge(branch_point, &[consequent, alternate]);
@@ -824,7 +790,7 @@ mod tests {
             );
             assert!(
                 match ir.get_node(i).instruction {
-                    IRInstruction::Block(_) => false,
+                    IRInstruction::Proj(_) => false,
                     _ => true,
                 },
                 "Found output select node at {}: {:#?}",

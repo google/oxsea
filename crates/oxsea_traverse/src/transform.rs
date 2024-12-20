@@ -1,6 +1,6 @@
 use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_INVALID_ID, IR_START_ID};
 
-use crate::{sort::reverse_topological_sort, Add, BindExport, Block, Compare, Constant, IfElse, LoadGlobal, Merge, Phi, Return};
+use crate::{sort::reverse_topological_sort, Add, BindExport, Proj, Compare, Constant, IfElse, LoadGlobal, Merge, Phi, Return};
 
 pub trait Transform {
     fn visit_constant(&mut self, constant: &Constant, out: &mut IRGraph) -> IRNodeId {
@@ -82,12 +82,12 @@ pub trait Transform {
         None
     }
 
-    fn visit_block(&mut self, block: &Block, out: &mut IRGraph) -> IRNodeId {
-        self.transform_block(block, out)
-            .unwrap_or_else(|| out.add_block(block.control_id(), block.index()))
+    fn visit_proj(&mut self, proj: &Proj, out: &mut IRGraph) -> IRNodeId {
+        self.transform_proj(proj, out)
+            .unwrap_or_else(|| out.add_proj(proj.control_id(), proj.index()))
     }
 
-    fn transform_block(&mut self, _block: &Block, _out: &mut IRGraph) -> Option<IRNodeId> {
+    fn transform_proj(&mut self, _proj: &Proj, _out: &mut IRGraph) -> Option<IRNodeId> {
         None
     }
 
@@ -202,8 +202,8 @@ where
                 },
                 &mut out,
             ),
-            IRInstruction::Block(index) => transform.visit_block(
-                &Block {
+            IRInstruction::Proj(index) => transform.visit_proj(
+                &Proj {
                     ctx: &context,
                     node_id,
                     node,
