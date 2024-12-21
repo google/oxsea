@@ -173,6 +173,97 @@ impl<'a> Visit<'a> for FromAST<'a> {
         /* Ignore contents of `declare ...` blocks. */
     }
 
+    fn visit_for_of_statement(&mut self, it: &oxc_ast::ast::ForOfStatement<'a>) {
+        let control_input = self.control_tail;
+
+        self.visit_expression(&it.right);
+        let iterable = self.value_stack.pop().unwrap();
+        let init_iter_record = self
+            .ir
+            .add_get_iterator(iterable, oxsea_ir::IteratorKind::Sync);
+        let for_of_loop = self.ir.add_loop(control_input);
+        let iter_record = self.ir.add_phi(for_of_loop, &[init_iter_record]);
+        let next = self.ir.add_iterator_next(iter_record);
+        let next_iter_record = self.ir.add_proj(next, 0);
+        self.ir.add_edge(next_iter_record, iter_record);
+        let next_done = self.ir.add_proj(next, 1);
+        let next_value = self.ir.add_proj(next, 2);
+
+        let loop_exit = self.ir.add_if_else(for_of_loop, next_done);
+        let loop_exit_true = self.ir.add_proj(loop_exit, 0);
+        let loop_exit_false = self.ir.add_proj(loop_exit, 1);
+
+        struct CollectSymbolWrites<'a> {
+            symbols: std::vec::Vec<SymbolId>,
+
+            semantic: &'a Semantic<'a>,
+        }
+
+        impl<'a> CollectSymbolWrites<'a> {
+            fn new(semantic: &'a Semantic<'a>) -> Self {
+                Self {
+                    symbols: vec![],
+                    semantic: semantic,
+                }
+            }
+        }
+
+        impl<'i> Visit<'i> for CollectSymbolWrites<'i> {
+            fn visit_identifier_reference(&mut self, it: &oxc_ast::ast::IdentifierReference<'i>) {
+                let reference = self.semantic.symbols().get_reference(it.reference_id());
+                if let Some(symbol) = reference.symbol_id() {
+                    if reference.flags().is_write() {
+                        self.symbols.push(symbol);
+                    }
+                }
+            }
+        }
+
+        let mut collect = CollectSymbolWrites::new(self._semantic);
+        collect.visit_statement(&it.body);
+        let write_symbols = collect.symbols;
+        for symbol in write_symbols.iter() {
+            let init_value = self.symbol_table[*symbol];
+            let phi = self.ir.add_phi(for_of_loop, &[init_value]);
+            self.symbol_table[*symbol] = phi;
+        }
+        let original_symbol_table = self.symbol_table.clone();
+
+        let loop_var_symbol = match &it.left {
+            oxc_ast::ast::ForStatementLeft::VariableDeclaration(r) if r.declarations.len() == 1 => {
+                r.declarations[0]
+                    .id
+                    .get_binding_identifier()
+                    .unwrap()
+                    .symbol_id()
+            }
+            _ => {
+                // This gets really interesting once the variable isn't declared in the loop head.
+                todo!(
+                    "ForOfStatement w/o single variable declaration: {:#?}",
+                    it.left
+                );
+            }
+        };
+        self.symbol_table[loop_var_symbol] = next_value;
+
+        self.control_tail = loop_exit_false;
+        self.visit_statement(&it.body);
+        self.ir.add_edge(self.control_tail, for_of_loop);
+
+        for symbol in write_symbols.iter() {
+            let pre_loop = original_symbol_table[*symbol];
+            let post_loop = self.symbol_table[*symbol];
+
+            if pre_loop != post_loop {
+                self.ir.add_edge(post_loop, pre_loop);
+            }
+            self.symbol_table[*symbol] = pre_loop;
+        }
+
+        self.control_tail = loop_exit_true;
+    }
+
     fn visit_if_statement(&mut self, it: &oxc_ast::ast::IfStatement<'a>) {
         let control_input = self.control_tail;
         // First, collect the node for our test expression.
@@ -339,6 +430,11 @@ mod tests {
     #[test]
     fn pruned_branch() {
         ir_from_source("let x = 1; if (true) { x = 2; } export default x;");
+    }
+
+    #[test]
+    fn for_of_loop() {
+        ir_from_source("let sum = 0; for (const n of arr) { sum = sum + n; } export default sum;");
     }
 
     #[test]
