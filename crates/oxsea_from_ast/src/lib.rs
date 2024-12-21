@@ -178,10 +178,7 @@ impl<'a> Visit<'a> for FromAST<'a> {
         // First, collect the node for our test expression.
         self.visit_expression(&it.test);
         let condition = self.value_stack.pop().unwrap();
-        let branch_id = self.ir.add_if_else(
-            control_input,
-            condition,
-        );
+        let branch_id = self.ir.add_if_else(control_input, condition);
         let consequent_id = self.ir.add_proj(branch_id, 0);
         let alternate_id = self.ir.add_proj(branch_id, 1);
 
@@ -200,7 +197,9 @@ impl<'a> Visit<'a> for FromAST<'a> {
             alternate_tail = self.control_tail;
         }
 
-        let merge_id = self.ir.add_merge(branch_id, &[consequent_tail, alternate_tail]);
+        let merge_id = self
+            .ir
+            .add_merge(branch_id, &[consequent_tail, alternate_tail]);
 
         for (symbol, value) in self.symbol_table.iter_mut_enumerated() {
             let consequent_value = consequent_symbol_table[symbol];

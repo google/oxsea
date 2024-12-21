@@ -31,6 +31,13 @@ pub enum CompileTimeValue {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum IteratorKind {
+    Enumerate,
+    Sync,
+    Async,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum IRInstruction {
     End,
     Start,
@@ -46,6 +53,9 @@ pub enum IRInstruction {
     // Merge node, optionally resolved to a single branch.
     Merge(Option<usize>),
     Phi,
+    GetIterator(IteratorKind),
+    IteratorNext,
+    Loop,
 }
 
 impl IRInstruction {
@@ -57,22 +67,9 @@ impl IRInstruction {
             | IRInstruction::Return
             | IRInstruction::BindExport(_)
             | IRInstruction::IfElse(_)
+            | IRInstruction::Loop
             | IRInstruction::Proj(_)
             | IRInstruction::Merge(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn has_named_inputs(&self) -> bool {
-        match self {
-            IRInstruction::Return | IRInstruction::BindExport(_) | IRInstruction::Add => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_unreachable(&self) -> bool {
-        match self {
-            IRInstruction::Unreachable => true,
             _ => false,
         }
     }
@@ -345,6 +342,15 @@ impl IRNode {
     pub fn is_dead(&self) -> bool {
         self.is_dead_control() || self.is_dead_value()
     }
+
+    pub fn is_control(&self, graph: &IRGraph) -> bool {
+        if let IRInstruction::Proj(_) = self.instruction {
+            // For projection nodes, check if the input is a control node.
+            return graph.get_node(self.inputs[0]).is_control(graph);
+        } else {
+            self.instruction().is_control()
+        }
+    }
 }
 
 impl std::fmt::Debug for IRNode {
@@ -589,6 +595,33 @@ impl IRGraph {
         };
         self.add_node(node)
     }
+
+    pub fn add_get_iterator(&mut self, arr: IRNodeId, kind: IteratorKind) -> IRNodeId {
+        let node = IRNode {
+            instruction: IRInstruction::GetIterator(kind),
+            inputs: vec![arr],
+            outputs: vec![],
+        };
+        self.add_node(node)
+    }
+
+    pub fn add_iterator_next(&mut self, it_record: IRNodeId) -> IRNodeId {
+        let node = IRNode {
+            instruction: IRInstruction::IteratorNext,
+            inputs: vec![it_record],
+            outputs: vec![],
+        };
+        self.add_node(node)
+    }
+
+    pub fn add_loop(&mut self, control: IRNodeId) -> IRNodeId {
+        let node = IRNode {
+            instruction: IRInstruction::Loop,
+            inputs: vec![control],
+            outputs: vec![],
+        };
+        self.add_node(node)
+    }
 }
 
 pub fn ir_to_dot(graph: &IRGraph) -> String {
@@ -713,6 +746,17 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
             IRInstruction::LoadGlobal(name) => {
                 label.push_str(&format!("global '{}'", name));
             }
+            IRInstruction::GetIterator(kind) => {
+                label.push_str(&format!("%GetIterator(kind={:?})", kind));
+            }
+            IRInstruction::IteratorNext => {
+                label.push_str("%IteratorNext");
+            }
+            IRInstruction::Loop => {
+                label.push_str("loop");
+                input_names.push("start".to_string());
+                input_names.push("repeat".to_string());
+            }
         }
 
         let has_named_inputs = input_names.len() > 0;
@@ -735,7 +779,7 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
             } else {
                 dot.push_str(&format!("[shape=box, label=\"{}\"]", label));
             }
-            if node.instruction.is_control() {
+            if node.is_control(graph) {
                 if is_unused {
                     dot.push_str(" [style=\"filled, dashed\", fillcolor=\"#ffffaa\"]");
                 } else {
@@ -751,8 +795,27 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
         }
 
         dot.push_str(";\n");
-        for (input_idx, input) in node.inputs().iter().enumerate() {
-            dot.push_str(&format!("  n{} -> n{}:i{};\n", input, pos, input_idx));
+
+        if node.instruction == IRInstruction::Phi {
+            dot.push_str(&format!(
+                "  n{} -> n{}:i{} [style=dotted];\n",
+                node.inputs[0], pos, 0
+            ));
+            for (input_idx, input) in node.inputs().iter().skip(1).enumerate() {
+                dot.push_str(&format!("  n{} -> n{}:i{};\n", input, pos, input_idx + 1));
+            }
+        } else {
+            for (input_idx, input) in node.inputs().iter().enumerate() {
+                let style = if node.is_control(graph) && graph.get_node(*input).is_control(graph) {
+                    "[color=red]"
+                } else {
+                    ""
+                };
+                dot.push_str(&format!(
+                    "  n{} -> n{}:i{} {};\n",
+                    input, pos, input_idx, style
+                ));
+            }
         }
     }
     dot.push_str("}\n");

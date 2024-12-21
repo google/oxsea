@@ -1,7 +1,7 @@
 use oxc_ast::ast::BinaryOperator;
 use oxsea_ir::{
-    CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IR_END_ID, IR_INVALID_ID,
-    IR_START_ID,
+    CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IteratorKind, IR_END_ID,
+    IR_INVALID_ID, IR_START_ID,
 };
 use sort::topological_sort;
 
@@ -83,6 +83,18 @@ pub struct Unreachable<'i> {
     node_id: IRNodeId,
 }
 node_kind! { Unreachable }
+
+pub struct Loop<'i> {
+    ctx: &'i Context<'i>,
+    node: &'i IRNode,
+    node_id: IRNodeId,
+}
+
+impl Loop<'_> {
+    input_id_accessor!(control_id, 0);
+    input_id_accessor!(repeat_control_id, 1);
+}
+node_kind! { Loop }
 
 pub struct Return<'i> {
     ctx: &'i Context<'i>,
@@ -195,8 +207,8 @@ impl IfElse<'_> {
         self.node.outputs()[1]
     }
 
-    pub fn continuation_id(&self) -> usize {
-        self.node.outputs()[2]
+    pub fn continuation_id(&self) -> Option<IRNodeId> {
+        self.node.outputs().get(2).copied()
     }
 
     pub fn resolved(&self) -> &Option<bool> {
@@ -213,6 +225,7 @@ pub struct Proj<'i> {
 }
 impl Proj<'_> {
     input_id_accessor!(control_id, 0);
+    input_id_accessor!(value_id, 0);
 
     pub fn index(&self) -> usize {
         self.index
@@ -259,7 +272,7 @@ impl Merge<'_> {
         return self.node.inputs()[1..]
             .iter()
             .map(|x| self.ctx.node_id(*x))
-            .collect()
+            .collect();
     }
 }
 
@@ -277,7 +290,7 @@ impl Phi<'_> {
         return self.node.inputs()[1..]
             .iter()
             .map(|x| self.ctx.node_id(*x))
-            .collect()
+            .collect();
     }
 }
 
@@ -302,6 +315,31 @@ pub struct PhiValue<'i> {
     node_id: IRNodeId,
 }
 node_kind! { PhiValue }
+
+pub struct GetIterator<'i> {
+    ctx: &'i Context<'i>,
+    node: &'i IRNode,
+    node_id: IRNodeId,
+    kind: &'i IteratorKind,
+}
+impl GetIterator<'_> {
+    input_id_accessor!(value_id, 0);
+
+    pub fn kind(&self) -> &IteratorKind {
+        &self.kind
+    }
+}
+node_kind! { GetIterator }
+
+pub struct IteratorNext<'i> {
+    ctx: &'i Context<'i>,
+    node: &'i IRNode,
+    node_id: IRNodeId,
+}
+impl IteratorNext<'_> {
+    input_id_accessor!(value_id, 0);
+}
+node_kind! { IteratorNext }
 
 pub fn traverse<'i, T>(ir: &IRGraph, visit: &mut T)
 where
@@ -361,7 +399,7 @@ pub trait Visit {
 
         match node.instruction() {
             IRInstruction::Proj(index) => {
-                self.visit_proj(&Proj {
+                self.visit_proj_control(&Proj {
                     ctx: parent.ctx(),
                     node: node,
                     node_id,
@@ -432,6 +470,28 @@ pub trait Visit {
                     node_id,
                 });
             }
+            IRInstruction::Loop => {
+                let r#loop = Loop {
+                    ctx: parent.ctx(),
+                    node: node,
+                    node_id,
+                };
+                match parent.node_id() {
+                    id if id == r#loop.control_id() => {
+                        self.visit_loop_head(&r#loop);
+                    }
+                    id if id == r#loop.repeat_control_id() => {
+                        self.visit_loop_end(&r#loop);
+                    }
+                    _ => {
+                        panic!(
+                            "Unexpected input node {} for loop {:#?}",
+                            parent.node_id(),
+                            node
+                        );
+                    }
+                }
+            }
             i if !i.is_control() => {
                 // Ignored, not a control.
             }
@@ -488,6 +548,29 @@ pub trait Visit {
                     node_id: node_id,
                 });
             }
+            IRInstruction::Proj(index) => {
+                self.visit_proj_value(&Proj {
+                    ctx: parent.ctx(),
+                    node: node,
+                    node_id: node_id,
+                    index: *index,
+                });
+            }
+            IRInstruction::IteratorNext => {
+                self.visit_iterator_next(&IteratorNext {
+                    ctx: parent.ctx(),
+                    node: node,
+                    node_id: node_id,
+                });
+            }
+            IRInstruction::GetIterator(kind) => {
+                self.visit_get_iterator(&GetIterator {
+                    ctx: parent.ctx(),
+                    node: node,
+                    node_id: node_id,
+                    kind: &kind,
+                });
+            }
             _ => {
                 panic!(
                     "Not implemented - visit_value: {:#?}",
@@ -506,15 +589,49 @@ pub trait Visit {
         enter_node!(self, end);
     }
 
-    fn visit_proj(&mut self, proj: &Proj) {
-        self.walk_proj(proj);
+    fn visit_loop_head(&mut self, r#loop: &Loop) {
+        self.walk_loop_head(r#loop);
     }
 
-    fn walk_proj(&mut self, proj: &Proj) {
+    fn walk_loop_head(&mut self, r#loop: &Loop) {
+        enter_node!(self, r#loop);
+
+        self.visit_control_outputs(r#loop);
+
+        enter_node!(self, r#loop);
+    }
+
+    fn visit_loop_end(&mut self, r#loop: &Loop) {
+        self.walk_loop_end(r#loop);
+    }
+
+    fn walk_loop_end(&mut self, r#loop: &Loop) {
+        enter_node!(self, r#loop);
+        enter_node!(self, r#loop);
+    }
+
+    fn visit_proj_control(&mut self, proj: &Proj) {
+        self.walk_proj_control(proj);
+    }
+
+    fn walk_proj_control(&mut self, proj: &Proj) {
         enter_node!(self, proj);
 
         // Visit all children as statements:
         self.visit_control_outputs(proj);
+
+        enter_node!(self, proj);
+    }
+
+    fn visit_proj_value(&mut self, proj: &Proj) {
+        self.walk_proj_value(proj);
+    }
+
+    fn walk_proj_value(&mut self, proj: &Proj) {
+        enter_node!(self, proj);
+
+        // Visit all children as statements:
+        self.visit_value(proj, proj.value_id());
 
         enter_node!(self, proj);
     }
@@ -539,8 +656,9 @@ pub trait Visit {
         self.visit_control(if_else, alternate_id);
 
         // 4. Visit post-merge continuation.
-        let cont_id = if_else.continuation_id();
-        self.visit_control(if_else, cont_id);
+        if let Some(cont_id) = if_else.continuation_id() {
+            self.visit_control(if_else, cont_id);
+        }
 
         leave_node!(self, if_else);
     }
@@ -660,5 +778,74 @@ pub trait Visit {
         self.visit_value(compare, compare.right_id());
 
         enter_node!(self, compare);
+    }
+
+    fn visit_get_iterator(&mut self, get_iterator: &GetIterator) {
+        self.walk_get_iterator(get_iterator);
+    }
+
+    fn walk_get_iterator(&mut self, get_iterator: &GetIterator) {
+        enter_node!(self, get_iterator);
+
+        self.visit_value(get_iterator, get_iterator.value_id());
+
+        enter_node!(self, get_iterator);
+    }
+
+    fn visit_iterator_next(&mut self, iterator_next: &IteratorNext) {
+        self.walk_iterator_next(iterator_next);
+    }
+
+    fn walk_iterator_next(&mut self, iterator_next: &IteratorNext) {
+        enter_node!(self, iterator_next);
+
+        self.visit_value(iterator_next, iterator_next.value_id());
+
+        enter_node!(self, iterator_next);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oxsea_ir::CompileTimeValue::*;
+    use oxsea_ir::IteratorKind;
+    use oxsea_ir::IR_START_ID;
+
+    struct NoopVisit {
+        node_ids: std::vec::Vec<IRNodeId>,
+    }
+
+    impl Visit for NoopVisit {
+        fn enter_node(&mut self, node_id: IRNodeId, _node: &IRNode) {
+            self.node_ids.push(node_id);
+        }
+    }
+
+    #[test]
+    fn traverse_with_cycle() {
+        let mut ir = IRGraph::new();
+
+        let init_sum = ir.add_constant(Number(0.0));
+        let arr = ir.add_load_global("arr".to_string());
+        let init_iter_record = ir.add_get_iterator(arr, IteratorKind::Sync);
+        let for_of_loop = ir.add_loop(IR_START_ID);
+        let sum = ir.add_phi(for_of_loop, &[init_sum]);
+        let iter_record = ir.add_phi(for_of_loop, &[init_iter_record]);
+        let next = ir.add_iterator_next(iter_record);
+        let next_iter_record = ir.add_proj(next, 0);
+        let next_done = ir.add_proj(next, 1);
+        let next_value = ir.add_proj(next, 2);
+        let loop_exit = ir.add_if_else(for_of_loop, next_done);
+        let loop_exit_true = ir.add_proj(loop_exit, 0);
+        let loop_exit_false = ir.add_proj(loop_exit, 1);
+        let sum_plus_value = ir.add_add(sum, next_value);
+        ir.add_edge(loop_exit_true, IR_END_ID);
+        ir.add_edge(loop_exit_false, for_of_loop);
+        ir.add_edge(sum_plus_value, sum);
+        ir.add_edge(next_iter_record, iter_record);
+        let mut visit = NoopVisit { node_ids: vec![] };
+        traverse(&ir, &mut visit);
+        assert!(visit.node_ids.contains(&IR_END_ID), "End node not visited");
     }
 }

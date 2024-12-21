@@ -1,6 +1,9 @@
 use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_INVALID_ID, IR_START_ID};
 
-use crate::{sort::reverse_topological_sort, Add, BindExport, Proj, Compare, Constant, IfElse, LoadGlobal, Merge, Phi, Return};
+use crate::{
+    sort::reverse_topological_sort, Add, BindExport, Compare, Constant, IfElse, LoadGlobal, Merge,
+    Phi, Proj, Return,
+};
 
 pub trait Transform {
     fn visit_constant(&mut self, constant: &Constant, out: &mut IRGraph) -> IRNodeId {
@@ -64,9 +67,8 @@ pub trait Transform {
     }
 
     fn visit_add(&mut self, add: &Add, out: &mut IRGraph) -> IRNodeId {
-        self.transform_add(add, out).unwrap_or_else(|| {
-            out.add_add(add.left_id(), add.right_id())
-        })
+        self.transform_add(add, out)
+            .unwrap_or_else(|| out.add_add(add.left_id(), add.right_id()))
     }
 
     fn transform_add(&mut self, _add: &Add, _out: &mut IRGraph) -> Option<IRNodeId> {
@@ -93,19 +95,15 @@ pub trait Transform {
 
     fn visit_merge(&mut self, merge: &Merge, out: &mut IRGraph) -> IRNodeId {
         self.transform_merge(merge, out)
-            .unwrap_or_else(|| {
-                match merge.resolved_index() {
-                    Some(value_index) => {
-                        if merge.has_phi_outputs() {
-                            out.add_resolved_merge(merge.branch_point_id(), *value_index)
-                        } else {
-                            merge.branch_point_id()
-                        }
-                    }
-                    None => {
-                        out.add_merge(merge.branch_point_id(), &merge.merge_input_ids())
+            .unwrap_or_else(|| match merge.resolved_index() {
+                Some(value_index) => {
+                    if merge.has_phi_outputs() {
+                        out.add_resolved_merge(merge.branch_point_id(), *value_index)
+                    } else {
+                        merge.branch_point_id()
                     }
                 }
+                None => out.add_merge(merge.branch_point_id(), &merge.merge_input_ids()),
             })
     }
 

@@ -213,7 +213,9 @@ impl Visit for IntoAST<'_, '_> {
             ),
         ));
 
-        self.visit_control(if_else, if_else.continuation_id());
+        if let Some(continuation_id) = if_else.continuation_id() {
+            self.visit_control(if_else, continuation_id);
+        }
     }
 }
 
@@ -360,10 +362,7 @@ mod tests {
         let a = ir.add_constant(oxsea_ir::CompileTimeValue::Number(2.0));
         let b = ir.add_constant(oxsea_ir::CompileTimeValue::Number(4.0));
         let cond = ir.add_load_global("cond".to_string());
-        let branch = ir.add_if_else(
-            IR_START_ID,
-            cond,
-        );
+        let branch = ir.add_if_else(IR_START_ID, cond);
         let consequent_id = ir.add_proj(branch, 0);
         let alternate_id = ir.add_proj(branch, 1);
         let merge = ir.add_merge(branch, &[consequent_id, alternate_id]);
