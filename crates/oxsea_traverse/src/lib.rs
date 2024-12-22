@@ -1,6 +1,8 @@
+use core::panic;
+
 use oxc_ast::ast::BinaryOperator;
 use oxsea_ir::{
-    CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IteratorKind, IR_END_ID,
+    CompileTimeValue, IRGraph, IRInstruction, IRNode, IRNodeId, IteratorKind,
     IR_INVALID_ID, IR_START_ID,
 };
 use sort::topological_sort;
@@ -15,7 +17,6 @@ pub struct Context<'i> {
     graph: &'i IRGraph,
 
     order: std::vec::Vec<IRNodeId>,
-    ids: std::vec::Vec<IRNodeId>,
 }
 
 impl Context<'_> {
@@ -24,19 +25,13 @@ impl Context<'_> {
         Context {
             graph,
             order,
-            ids: vec![],
         }
     }
 
     pub fn new_with_ids(graph: &IRGraph) -> Context {
-        let mut ids = vec![IR_INVALID_ID; graph.len()];
-        ids[IR_END_ID] = IR_END_ID;
-        ids[IR_START_ID] = IR_START_ID;
-
         Context {
             graph,
             order: vec![IR_INVALID_ID; graph.len()],
-            ids,
         }
     }
 
@@ -46,14 +41,6 @@ impl Context<'_> {
 
     fn topological_order(&self) -> &std::vec::Vec<IRNodeId> {
         &self.order
-    }
-
-    fn node_id(&self, original_id: usize) -> usize {
-        if self.ids.len() > 0 {
-            self.ids[original_id]
-        } else {
-            original_id
-        }
     }
 }
 
@@ -199,17 +186,9 @@ impl IfElse<'_> {
     input_id_accessor!(control_id, 0);
     input_id_accessor!(condition_id, 1);
 
-    pub fn consequent_id(&self) -> IRNodeId {
-        self.node.outputs()[0]
-    }
-
-    pub fn alternate_id(&self) -> IRNodeId {
-        self.node.outputs()[1]
-    }
-
-    pub fn continuation_id(&self) -> Option<IRNodeId> {
-        self.node.outputs().get(2).copied()
-    }
+    output_id_accessor!(consequent_id, 0);
+    output_id_accessor!(alternate_id, 1);
+    optional_output_id_accessor!(continuation_id, 2);
 
     pub fn resolved(&self) -> &Option<bool> {
         self.resolved
@@ -269,10 +248,7 @@ impl Merge<'_> {
     }
 
     pub fn merge_input_ids(&self) -> std::vec::Vec<IRNodeId> {
-        return self.node.inputs()[1..]
-            .iter()
-            .map(|x| self.ctx.node_id(*x))
-            .collect();
+        self.node.inputs().iter().skip(1).map(|x| *x).collect()
     }
 }
 
@@ -287,10 +263,7 @@ impl Phi<'_> {
     input_id_accessor!(control_id, 0);
 
     pub fn value_ids(&self) -> std::vec::Vec<IRNodeId> {
-        return self.node.inputs()[1..]
-            .iter()
-            .map(|x| self.ctx.node_id(*x))
-            .collect();
+        self.node.inputs().iter().skip(1).map(|x| *x).collect()
     }
 }
 
@@ -810,6 +783,7 @@ mod tests {
     use super::*;
     use oxsea_ir::CompileTimeValue::*;
     use oxsea_ir::IteratorKind;
+    use oxsea_ir::IR_END_ID;
     use oxsea_ir::IR_START_ID;
 
     struct NoopVisit {

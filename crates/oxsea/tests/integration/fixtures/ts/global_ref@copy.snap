@@ -13,14 +13,14 @@ digraph {
   n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
   n2 [shape=box, label="global 'a'"] [style=rounded];
   n3 [shape=box, label="global 'b'"] [style=rounded];
-  n4 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
+  n4 [shape=record, label="{{in|<i0> left|<i1> right}|+}"] [style=rounded];
   n2 -> n4:i0 ;
   n3 -> n4:i1 ;
   n5 [shape=box, label="global 'c'"] [style=rounded];
-  n6 [shape=record, label="{{<i0> left|<i1> right}|+}"] [style=rounded];
+  n6 [shape=record, label="{{in|<i0> left|<i1> right}|+}"] [style=rounded];
   n4 -> n6:i0 ;
   n5 -> n6:i1 ;
-  n7 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n7 [shape=record, label="{{in|<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
   n1 -> n7:i0 [color=red];
   n6 -> n7:i1 ;
 }

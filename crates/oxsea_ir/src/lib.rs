@@ -56,6 +56,8 @@ pub enum IRInstruction {
     GetIterator(IteratorKind),
     IteratorNext,
     Loop,
+    // Inserted to resolve cycles in the graph.
+    PendingResolution,
 }
 
 impl IRInstruction {
@@ -451,6 +453,10 @@ impl IRGraph {
         &self.nodes[id]
     }
 
+    pub fn get_node_mut(&mut self, id: usize) -> &mut IRNode {
+        &mut self.nodes[id]
+    }
+
     pub fn end_node(&self) -> &IRNode {
         &self.nodes[IR_END_ID]
     }
@@ -622,6 +628,44 @@ impl IRGraph {
         };
         self.add_node(node)
     }
+
+    pub fn add_loop_with_repeat(&mut self, control: IRNodeId, repeat_control: IRNodeId) -> IRNodeId {
+        let node = IRNode {
+            instruction: IRInstruction::Loop,
+            inputs: vec![control, repeat_control],
+            outputs: vec![],
+        };
+        self.add_node(node)
+    }
+
+    pub fn add_pending_resolution(&mut self) -> IRNodeId {
+        let node = IRNode {
+            instruction: IRInstruction::PendingResolution,
+            inputs: vec![],
+            outputs: vec![],
+        };
+        self.add_node(node)
+    }
+
+    pub fn set_resolution(&mut self, pending_id: IRNodeId, output_graph_id: IRNodeId) {
+        let pending = &mut self.nodes[pending_id];
+        assert!(pending.inputs().len() == 0, "Unresolved node may not have inputs");
+        let consuming_ids = pending.outputs().clone();
+        pending.outputs.clear();
+        println!("Setting resolution for node {:#?}: {:?}", pending, output_graph_id);
+
+        for consuming_id in consuming_ids {
+            let consuming = &mut self.nodes[consuming_id];
+            let mut found = false;
+            for input in consuming.inputs.iter_mut() {
+                if *input == pending_id {
+                    *input = output_graph_id;
+                    found = true;
+                }
+            }
+            assert!(found, "Resolution not found in consuming node");
+        }
+    }
 }
 
 pub fn ir_to_dot(graph: &IRGraph) -> String {
@@ -635,7 +679,12 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
         ",
     );
     for (pos, node) in graph.nodes.iter().enumerate() {
+        if let IRInstruction::Proj(_) = node.instruction() {
+            continue;
+        }
+
         let mut input_names: Vec<String> = vec![];
+        let mut output_names: Vec<String> = vec![];
         let mut use_default_shape = true;
         let mut label = String::new();
 
@@ -671,11 +720,15 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
                 label.push_str("if");
                 input_names.push("control".to_string());
                 input_names.push("condition".to_string());
+                output_names.push("true".to_string());
+                output_names.push("false".to_string());
             }
             IRInstruction::IfElse(Some(val)) => {
                 label.push_str(&format!("if ({})", val));
                 input_names.push("control".to_string());
                 input_names.push("condition".to_string());
+                output_names.push("true".to_string());
+                output_names.push("false".to_string());
             }
             IRInstruction::Merge(resolved) => {
                 if let Some(resolved) = resolved {
@@ -692,8 +745,11 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
                     }
                 }
             }
-            IRInstruction::Proj(index) => {
-                label.push_str(&format!("outputs[{}]", index));
+            IRInstruction::Proj(_) => {
+                panic!("Proj nodes should not be rendered");
+            }
+            IRInstruction::PendingResolution => {
+                label.push_str(&"<pending>");
             }
             IRInstruction::Phi => {
                 label.push_str("Φ");
@@ -751,6 +807,9 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
             }
             IRInstruction::IteratorNext => {
                 label.push_str("%IteratorNext");
+                output_names.push("this".to_string());
+                output_names.push("done".to_string());
+                output_names.push("value".to_string());
             }
             IRInstruction::Loop => {
                 label.push_str("loop");
@@ -766,16 +825,30 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
 
         if use_default_shape {
             let is_unused = node.is_dead();
-            let has_named_inputs = input_names.len() > 0;
-            if has_named_inputs {
-                dot.push_str(&"[shape=record, label=\"{{");
-                for (input_idx, input_name) in input_names.iter().enumerate() {
-                    if input_idx > 0 {
-                        dot.push_str("|");
+            if input_names.len() > 0 || output_names.len() > 0 {
+                dot.push_str(&"[shape=record, label=\"{");
+                if input_names.len() > 0 {
+                    dot.push_str(&"{in|");
+                    for (input_idx, input_name) in input_names.iter().enumerate() {
+                        if input_idx > 0 {
+                            dot.push_str("|");
+                        }
+                        dot.push_str(&format!("<i{}> {}", input_idx, input_name));
                     }
-                    dot.push_str(&format!("<i{}> {}", input_idx, input_name));
+                    dot.push_str(&"}|");
                 }
-                dot.push_str(&format!("}}|{}}}\"]", label));
+                dot.push_str(&label);
+                if output_names.len() > 0 {
+                    dot.push_str(&"|{out|");
+                    for (output_idx, output_name) in output_names.iter().enumerate() {
+                        if output_idx > 0 {
+                            dot.push_str("|");
+                        }
+                        dot.push_str(&format!("<o{}> {}", output_idx, output_name));
+                    }
+                    dot.push_str(&"}");
+                }
+                dot.push_str(&"}\"]");
             } else {
                 dot.push_str(&format!("[shape=box, label=\"{}\"]", label));
             }
@@ -796,13 +869,27 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
 
         dot.push_str(";\n");
 
+        fn format_input(graph: &IRGraph, input_id: IRNodeId) -> String {
+            let node = graph.get_node(input_id);
+            if let IRInstruction::Proj(index) = node.instruction() {
+                format!("n{}:o{}", node.inputs()[0], index)
+            } else {
+                format!("n{}", input_id)
+            }
+        }
+
         if node.instruction == IRInstruction::Phi {
             dot.push_str(&format!(
                 "  n{} -> n{}:i{} [style=dotted];\n",
                 node.inputs[0], pos, 0
             ));
             for (input_idx, input) in node.inputs().iter().skip(1).enumerate() {
-                dot.push_str(&format!("  n{} -> n{}:i{};\n", input, pos, input_idx + 1));
+                dot.push_str(&format!(
+                    "  {} -> n{}:i{};\n",
+                    format_input(graph, *input),
+                    pos,
+                    input_idx + 1
+                ));
             }
         } else {
             for (input_idx, input) in node.inputs().iter().enumerate() {
@@ -812,8 +899,11 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
                     ""
                 };
                 dot.push_str(&format!(
-                    "  n{} -> n{}:i{} {};\n",
-                    input, pos, input_idx, style
+                    "  {} -> n{}:i{} {};\n",
+                    format_input(graph, *input),
+                    pos,
+                    input_idx,
+                    style
                 ));
             }
         }

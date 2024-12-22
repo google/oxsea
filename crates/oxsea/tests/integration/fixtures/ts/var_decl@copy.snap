@@ -12,7 +12,7 @@ digraph {
   n3 -> n0:i0 [color=red];
   n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
   n2 [shape=box, label="= 28.0"] [style=rounded];
-  n3 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n3 [shape=record, label="{{in|<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
   n1 -> n3:i0 [color=red];
   n2 -> n3:i1 ;
 }

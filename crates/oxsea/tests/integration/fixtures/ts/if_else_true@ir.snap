@@ -14,7 +14,7 @@ digraph {
   n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
   n2 [shape=box, label="= 1.0"] [style="rounded, dashed"];
   n3 [shape=box, label="= true"] [style=rounded];
-  n4 [shape=record, label="{{<i0> control|<i1> condition}|if (true)}"] [style="filled, dashed", fillcolor="#ffffaa"];
+  n4 [shape=record, label="{{in|<i0> control|<i1> condition}|if (true)|{out|<o0> true|<o1> false}}"] [style="filled, dashed", fillcolor="#ffffaa"];
   n1 -> n4:i0 [color=red];
   n3 -> n4:i1 ;
   n5 [label="never", shape=hexagon, fillcolor="#fcc"] [style="filled, dashed"];
@@ -23,7 +23,7 @@ digraph {
   n8 [fontcolor=gray, color=gray][shape=box, label="merge = 0"] [style=filled, fillcolor="#ffffaa"];
   n1 -> n8:i0 [color=red];
   n9 [shape=box, label="= true"] [style=rounded];
-  n10 [shape=record, label="{{<i0> control|<i1> condition}|if (true)}"] [style="filled, dashed", fillcolor="#ffffaa"];
+  n10 [shape=record, label="{{in|<i0> control|<i1> condition}|if (true)|{out|<o0> true|<o1> false}}"] [style="filled, dashed", fillcolor="#ffffaa"];
   n8 -> n10:i0 [color=red];
   n9 -> n10:i1 ;
   n11 [label="never", shape=hexagon, fillcolor="#fcc"] [style="filled, dashed"];
@@ -33,7 +33,7 @@ digraph {
   n15 [shape=box, label="= 11.0"] [style="rounded, dashed"];
   n16 [fontcolor=gray, color=gray][shape=box, label="merge = 0"] [style=filled, fillcolor="#ffffaa"];
   n8 -> n16:i0 [color=red];
-  n17 [shape=record, label="{{<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n17 [shape=record, label="{{in|<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
   n16 -> n17:i0 [color=red];
   n13 -> n17:i1 ;
 }

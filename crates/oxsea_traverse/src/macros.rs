@@ -32,17 +32,26 @@ macro_rules! node_kind {
 #[macro_export]
 macro_rules! input_id_accessor {
     ($name:ident, $idx:expr) => {
-        pub fn $name(&self) -> usize {
-            let original_id = self.node.inputs()[$idx];
-            let id = self.ctx().node_id(original_id);
-            assert!(
-                id != IR_INVALID_ID,
-                "Could not find input[{}] = {} of {:#?}",
-                $idx,
-                original_id,
-                self.node
-            );
-            id
+        pub fn $name(&self) -> IRNodeId {
+            self.node.inputs()[$idx]
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! output_id_accessor {
+    ($name:ident, $idx:expr) => {
+        pub fn $name(&self) -> IRNodeId {
+            self.node.outputs()[$idx]
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! optional_output_id_accessor {
+    ($name:ident, $idx:expr) => {
+        pub fn $name(&self) -> Option<IRNodeId> {
+            self.node.outputs().get($idx).copied()
         }
     };
 }
