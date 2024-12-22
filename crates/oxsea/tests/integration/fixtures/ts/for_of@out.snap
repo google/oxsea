@@ -1,0 +1,9 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: code_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/for_of.ts
+snapshot_kind: text
+---
+if (Φ6) {
+	export default Φ14;
+}

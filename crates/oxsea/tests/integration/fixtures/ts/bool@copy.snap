@@ -19,6 +19,7 @@ digraph {
   n21 -> n0:i7 [color=red];
   n24 -> n0:i8 [color=red];
   n27 -> n0:i9 [color=red];
+  n1 -> n0:i10 [color=red];
   n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
   n2 [shape=box, label="= true"] [style=rounded];
   n3 [shape=record, label="{{in|<i0> control|<i1> value}|export 't'}"] [style=filled, fillcolor="#ffffaa"];

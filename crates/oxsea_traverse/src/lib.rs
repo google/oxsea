@@ -57,6 +57,12 @@ pub struct End<'i> {
 }
 node_kind! { End }
 
+impl End<'_> {
+    pub fn control_tail_ids(&self) -> std::vec::Vec<IRNodeId> {
+        self.node.inputs().iter().map(|x| *x).collect()
+    }
+}
+
 pub struct Start<'i> {
     ctx: &'i Context<'i>,
     node: &'i IRNode,

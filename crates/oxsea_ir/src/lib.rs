@@ -57,7 +57,7 @@ pub enum IRInstruction {
     IteratorNext,
     Loop,
     // Inserted to resolve cycles in the graph.
-    PendingResolution,
+    PendingResolution(IRNodeId),
 }
 
 impl IRInstruction {
@@ -638,9 +638,9 @@ impl IRGraph {
         self.add_node(node)
     }
 
-    pub fn add_pending_resolution(&mut self) -> IRNodeId {
+    pub fn add_pending_resolution(&mut self, original_id: IRNodeId) -> IRNodeId {
         let node = IRNode {
-            instruction: IRInstruction::PendingResolution,
+            instruction: IRInstruction::PendingResolution(original_id),
             inputs: vec![],
             outputs: vec![],
         };
@@ -649,10 +649,33 @@ impl IRGraph {
 
     pub fn set_resolution(&mut self, pending_id: IRNodeId, output_graph_id: IRNodeId) {
         let pending = &mut self.nodes[pending_id];
-        assert!(pending.inputs().len() == 0, "Unresolved node may not have inputs");
+        let original_id = match pending.instruction {
+            IRInstruction::Start | IRInstruction::End => {
+                // Nothing to be done, these nodes are pre-existing.
+                return;
+            }
+            IRInstruction::PendingResolution(id) => {
+                id
+            }
+            _ => panic!("Node n{} is not a pending resolution node", pending_id),
+        };
+        let incoming_ids = pending.inputs().clone();
+        pending.inputs.clear();
         let consuming_ids = pending.outputs().clone();
         pending.outputs.clear();
-        println!("Setting resolution for node {:#?}: {:?}", pending, output_graph_id);
+        println!("Setting resolution for node n{} (was n{}) {:#?}: {:?}", pending_id, original_id, pending, output_graph_id);
+
+        for incoming_id in incoming_ids {
+            let incoming = &mut self.nodes[incoming_id];
+            let mut found = false;
+            for output in incoming.outputs.iter_mut() {
+                if *output == pending_id {
+                    *output = output_graph_id;
+                    found = true;
+                }
+            }
+            assert!(found, "Resolution not found in incoming node");
+        }
 
         for consuming_id in consuming_ids {
             let consuming = &mut self.nodes[consuming_id];
@@ -681,6 +704,12 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
     for (pos, node) in graph.nodes.iter().enumerate() {
         if let IRInstruction::Proj(_) = node.instruction() {
             continue;
+        }
+        // These are just temporary nodes while copying graphs with cycles.
+        if let IRInstruction::PendingResolution(_) = node.instruction() {
+            if node.inputs().len() == 0 && node.outputs().len() == 0 {
+                continue;
+            }
         }
 
         let mut input_names: Vec<String> = vec![];
@@ -748,8 +777,8 @@ pub fn ir_to_dot(graph: &IRGraph) -> String {
             IRInstruction::Proj(_) => {
                 panic!("Proj nodes should not be rendered");
             }
-            IRInstruction::PendingResolution => {
-                label.push_str(&"<pending>");
+            IRInstruction::PendingResolution(id) => {
+                label.push_str(&format!("<pending: {}>", id));
             }
             IRInstruction::Phi => {
                 label.push_str("Φ");

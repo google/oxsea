@@ -10,6 +10,7 @@ digraph {
   edge [fontname="Helvetica,Arial,sans-serif"];
   n0 [label="", shape=circle, style=filled, fillcolor="#fff", height=0.3, width=0.3, penwidth=5];
   n10 -> n0:i0 [color=red];
+  n6 -> n0:i1 [color=red];
   n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
   n2 [shape=box, label="global 'cond'"] [style=rounded];
   n3 [shape=record, label="{{in|<i0> control|<i1> condition}|if|{out|<o0> true|<o1> false}}"] [style=filled, fillcolor="#ffffaa"];

@@ -1,15 +1,8 @@
 use oxsea_ir::{IRGraph, IRInstruction, IRNodeId, IR_END_ID, IR_INVALID_ID, IR_START_ID};
 
 use crate::{
-    sort::reverse_topological_sort, Add, BindExport, Compare, Constant, GetIterator, IfElse, IteratorNext, LoadGlobal, Loop, Merge, Phi, Proj, Return
+    sort::reverse_topological_sort, Add, BindExport, Compare, Constant, End, GetIterator, IfElse, IteratorNext, LoadGlobal, Loop, Merge, Phi, Proj, Return
 };
-
-#[derive(Clone)]
-pub enum IRNodeMapping {
-    Pending,
-    Placeholder(IRNodeId, std::vec::Vec<IRNodeId>),
-    Resolved(IRNodeId),
-}
 
 pub struct OutputGraph {
     pub ir: IRGraph,
@@ -30,7 +23,7 @@ impl OutputGraph {
     pub fn map_node_id(&mut self, input_graph_id: IRNodeId) -> IRNodeId {
         let id = self.input_id_to_output_id[input_graph_id];
         if id == IR_INVALID_ID {
-            let pending_id = self.ir.add_pending_resolution();
+            let pending_id = self.ir.add_pending_resolution(input_graph_id);
             self.input_id_to_output_id[input_graph_id] = pending_id;
             pending_id
         } else {
@@ -51,6 +44,7 @@ impl OutputGraph {
             self.input_id_to_output_id[input_graph_id] = output_graph_id;
         } else {
             self.ir.set_resolution(*existing, output_graph_id);
+            self.input_id_to_output_id[input_graph_id] = output_graph_id;
         }
     }
 }
@@ -243,6 +237,20 @@ pub trait Transform {
     fn transform_iterator_next(&mut self, _iterator_next: &IteratorNext, _out: &mut OutputGraph) -> Option<IRNodeId> {
         None
     }
+
+    fn visit_end(&mut self, end: &End, out: &mut OutputGraph) -> IRNodeId {
+        self.transform_end(end, out).unwrap_or_else(|| {
+            transform_node_ids!(out, end, control_tail_ids);
+            for id in control_tail_ids {
+                out.ir.add_edge(id, IR_END_ID);
+            }
+            IR_END_ID
+        })
+    }
+
+    fn transform_end(&mut self, _end: &End, _out: &mut OutputGraph) -> Option<IRNodeId> {
+        None
+    }
 }
 
 pub fn transform<T>(ir: &IRGraph, transform: &mut T) -> IRGraph
@@ -255,7 +263,7 @@ where
     let mut out = OutputGraph::new(ir);
 
     for node_id in order {
-        if node_id == IR_START_ID || node_id == IR_END_ID {
+        if node_id == IR_START_ID {
             continue;
         }
 
@@ -376,6 +384,14 @@ where
             ),
             IRInstruction::IteratorNext => transform.visit_iterator_next(
                 &IteratorNext {
+                    ctx: &context,
+                    node_id,
+                    node,
+                },
+                &mut out,
+            ),
+            IRInstruction::End => transform.visit_end(
+                &End {
                     ctx: &context,
                     node_id,
                     node,

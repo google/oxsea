@@ -1,0 +1,41 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: dot_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/for_of.ts
+snapshot_kind: text
+---
+digraph {
+  fontname="Helvetica,Arial,sans-serif";
+  node [fontname="Helvetica,Arial,sans-serif"];
+  edge [fontname="Helvetica,Arial,sans-serif"];
+  n0 [label="", shape=circle, style=filled, fillcolor="#fff", height=0.3, width=0.3, penwidth=5];
+  n16 -> n0:i0 [color=red];
+  n11:o0 -> n0:i1 [color=red];
+  n1 [shape=point, style=filled, fillcolor="#000", height=0.25, width=0.25];
+  n2 [shape=box, label="= 0.0"] [style=rounded];
+  n3 [shape=box, label="global 'arr'"] [style=rounded];
+  n4 [shape=box, label="%GetIterator(kind=Sync)"] [style=rounded];
+  n3 -> n4:i0 ;
+  n5 [shape=record, label="{{in|<i0> start|<i1> repeat}|loop}"] [style=filled, fillcolor="#ffffaa"];
+  n1 -> n5:i0 [color=red];
+  n11:o1 -> n5:i1 [color=red];
+  n6 [shape=record, label="{{in|<i0> c|<i1> v0|<i2> v1}|Φ}"] [style=rounded];
+  n5 -> n6:i0 [style=dotted];
+  n4 -> n6:i1;
+  n7:o0 -> n6:i2;
+  n7 [shape=record, label="{%IteratorNext|{out|<o0> this|<o1> done|<o2> value}}"] [style=rounded];
+  n6 -> n7:i0 ;
+  n11 [shape=record, label="{{in|<i0> control|<i1> condition}|if|{out|<o0> true|<o1> false}}"] [style=filled, fillcolor="#ffffaa"];
+  n5 -> n11:i0 [color=red];
+  n7:o1 -> n11:i1 ;
+  n14 [shape=record, label="{{in|<i0> c|<i1> v0|<i2> v1}|Φ}"] [style=rounded];
+  n5 -> n14:i0 [style=dotted];
+  n2 -> n14:i1;
+  n15 -> n14:i2;
+  n15 [shape=record, label="{{in|<i0> left|<i1> right}|+}"] [style=rounded];
+  n14 -> n15:i0 ;
+  n7:o2 -> n15:i1 ;
+  n16 [shape=record, label="{{in|<i0> control|<i1> value}|export 'default'}"] [style=filled, fillcolor="#ffffaa"];
+  n11:o0 -> n16:i0 [color=red];
+  n14 -> n16:i1 ;
+}
