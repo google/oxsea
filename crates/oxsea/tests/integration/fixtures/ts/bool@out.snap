@@ -1,0 +1,16 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: code_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/bool.ts
+snapshot_kind: text
+---
+export let leqUR = ga == 3;
+export let leqU = 2 == gb;
+export let leqF = false;
+export let leqT = true;
+export let eqUR = ga === 3;
+export let eqU = 2 === gb;
+export let eqF = false;
+export let eqT = true;
+export let f = false;
+export let t = true;

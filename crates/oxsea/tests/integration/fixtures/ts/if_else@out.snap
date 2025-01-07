@@ -1,0 +1,12 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: code_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/if_else.ts
+snapshot_kind: text
+---
+if (cond) {
+	Φ10 = 23;
+} else {
+	Φ10 = 37;
+}
+export default Φ10;

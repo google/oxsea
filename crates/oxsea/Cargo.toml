@@ -1,0 +1,16 @@
+[package]
+name = "oxsea"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oxsea_ir = { path = "../oxsea_ir" }
+oxsea_from_ast = { path = "../oxsea_from_ast" }
+oxsea_into_ast = { path = "../oxsea_into_ast" }
+
+[dev-dependencies]
+insta = { workspace = true, features = ["glob"] }
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_codegen.workspace = true
+oxc_parser.workspace = true

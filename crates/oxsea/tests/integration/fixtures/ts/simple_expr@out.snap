@@ -1,0 +1,7 @@
+---
+source: crates/oxsea/tests/integration/main.rs
+expression: code_snapshot
+input_file: crates/oxsea/tests/integration/fixtures/ts/simple_expr.ts
+snapshot_kind: text
+---
+export default 18;

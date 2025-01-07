@@ -1,0 +1,7 @@
+[package]
+name = "oxsea_ir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oxc_ast.workspace = true
